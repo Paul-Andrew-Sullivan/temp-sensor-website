@@ -64,10 +64,10 @@ export function makeChart(canvas, opts = {}) {
     cx.fillText("seconds ago", L + pw / 2, H - 10);
 
     const colw = pw / N;
-    // Hatch runs where both sensors are missing (box off, or both unplugged).
+    // Hatch runs wherever either sensor is missing (box off, or unplugged).
     let m = null;
     for (let i = 0; i < N; i++) {
-      const miss = series[0][i] == null && series[1][i] == null;
+      const miss = series[0][i] == null || series[1][i] == null;
       if (miss && m === null) m = i;
       if ((!miss || i === N - 1) && m !== null) {
         const a = L + colw * m, b = L + colw * (miss ? i + 1 : i);

@@ -113,7 +113,7 @@ function draw(){
   for(var sec=300;sec>=0;sec-=60){var x=L+pw*(1-sec/300);cx.beginPath();cx.moveTo(x,T);cx.lineTo(x,T+ph);cx.stroke();cx.textAlign='center';cx.fillText(sec,x,T+ph+34)}
   cx.fillText('seconds ago',L+pw/2,H-10);
   var colw=pw/N;
-  var m=null;for(var i=0;i<N;i++){var miss=s[0][i]==null&&s[1][i]==null;if(miss&&m===null)m=i;if((!miss||i===N-1)&&m!==null){var a=L+colw*m,b=L+colw*(miss?i+1:i);hatch(a,T,b-a,ph);m=null}}
+  var m=null;for(var i=0;i<N;i++){var miss=s[0][i]==null||s[1][i]==null;if(miss&&m===null)m=i;if((!miss||i===N-1)&&m!==null){var a=L+colw*m,b=L+colw*(miss?i+1:i);hatch(a,T,b-a,ph);m=null}}
   var cols=['#1a1a1a','#6b675f'];
   for(var si=0;si<2;si++){
     cx.strokeStyle=cols[si];cx.lineWidth=si?2.5:3.5;cx.setLineDash(si?[8,6]:[]);cx.beginPath();var pen=false;
