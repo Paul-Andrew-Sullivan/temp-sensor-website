@@ -8,6 +8,8 @@ try { unit = localStorage.getItem("unit") || "C"; } catch (e) { /* private mode 
 let box = "off", plugged = [false, false], on = [true, true], cur = [null, null], lastT = 0;
 let shown = 0; // which sensor the model shows
 let demo = { on: false, scenario: null };
+let dragged = false; // once the slider is touched, it drives the model until "follow live" is clicked
+const slider = $("slider");
 
 const chart = makeChart($("chart"), { unit });
 const thermo = makeThermometer($("model"), "./models/thermometer.glb");
@@ -47,9 +49,15 @@ function render() {
     b.textContent = "Sensor " + (i + 1) + " display: " + (on[i] ? "on" : "off");
     b.className = on[i] ? "" : "off";
   }
-  // the model
-  if (box === "off" || !plugged[shown]) thermo.setMissing();
-  else thermo.setTemp(cur[shown]);
+  // the model: the slider once dragged, otherwise the selected live sensor
+  if (dragged) {
+    thermo.setTemp(parseFloat(slider.value));
+  } else if (box === "off" || !plugged[shown]) {
+    thermo.setMissing();
+  } else {
+    thermo.setTemp(cur[shown]);
+    slider.value = cur[shown];
+  }
   $("modelline").innerHTML = "The thermometer shows sensor " + (shown + 1) + ". "
     + '<a href="#" id="swap">Show sensor ' + (2 - shown) + " instead</a>.";
   $("swap").onclick = (e) => { e.preventDefault(); shown = 1 - shown; render(); };
@@ -75,6 +83,15 @@ function render() {
     d.hidden = true;
   }
 }
+
+slider.addEventListener("input", () => {
+  dragged = true;
+  const c = parseFloat(slider.value);
+  $("sliderline").innerHTML = "Set by the slider: " + c.toFixed(1) + " °C, " + ((c * 9) / 5 + 32).toFixed(1) + " °F. "
+    + '<a href="#" id="live">Follow the live reading again</a>.';
+  $("live").onclick = (e) => { e.preventDefault(); dragged = false; $("sliderline").textContent = "The thermometer is following the live reading."; render(); };
+  render();
+});
 
 function postJSON(url, body, method = "POST") {
   return fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json());

@@ -26,6 +26,11 @@
     </div>
     <p class="units" style="margin-top:18px">Show in <span id="units"></span></p>
     <p class="status" id="modelline"></p>
+    <div class="slider">
+      <label for="slider">Try it: drag to set the thermometer yourself</label>
+      <input id="slider" type="range" min="-10" max="63" step="0.1" value="22">
+      <p class="status" id="sliderline">The thermometer is following the live reading.</p>
+    </div>
   </div>
 </div>
 
@@ -38,6 +43,7 @@
 <canvas id="chart" width="1880" height="560"></canvas>
 <p class="status">The graph moves left once a second. Missing data is hatched. A reading beyond the graph's range is drawn as a red line pinned to the top or bottom edge, so a broken sensor never looks like a hot one.</p>
 
+<section id="alerts" hidden>
 <h2>Email or text when it goes out of range</h2>
 <p>The message goes out once when a sensor crosses a limit, and again only after it has come back inside the range by half a degree. For a text, use your carrier's email-to-SMS address, for example 3195551234@txt.att.net. Mail is sent by the server, so nobody needs to keep this page open.</p>
 <label for="email">Send to</label><input id="email" placeholder="name@example.com" autocomplete="email">
@@ -49,9 +55,10 @@
 <label for="minMessage">Message when below the minimum</label><textarea id="minMessage"></textarea>
 <p style="margin-top:12px"><a href="#" id="save">Save these settings</a><span id="saved"></span></p>
 <p class="status" id="lastsent"></p>
+</section>
 
 <footer>
-<p>The ESP32 in the box reads two DS18B20 probes on one-meter leads and posts to this server twice a second. The server keeps the last 300 seconds and sends the alerts. A leaner copy of this page, the one the board can serve by itself, is at <a href="https://thermo-esp32.paulandrewsullivan.com">thermo-esp32.paulandrewsullivan.com</a>.</p>
+<p>The ESP32 in the box reads two DS18B20 probes on one-meter leads and posts to this server twice a second. The server keeps the last 300 seconds. A leaner copy of this page, the one the board can serve by itself, is at <a href="https://thermo-esp32.paulandrewsullivan.com">thermo-esp32.paulandrewsullivan.com</a>.</p>
 <p>ECE:4880 Principles of ECE/CSE Design, Lab 1, fall 2026. Paul Sullivan and team. Built September 2026. Thermometer model by <a href="https://sketchfab.com/3d-models/thermometer-39a8561572e341a49cdbaa257321dd3a">Armature Studios on Sketchfab</a>, CC BY 4.0. Source on <a href="https://github.com/Paul-Andrew-Sullivan/temp-sensor-website">GitHub</a>.</p>
 </footer>
 </main>

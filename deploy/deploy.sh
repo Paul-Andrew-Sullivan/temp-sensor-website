@@ -12,7 +12,7 @@ RECREATE=${1:-}
 
 echo "== sync"
 ssh "$HOST" "mkdir -p $BASE/data"
-rsync -az --delete --exclude '__pycache__' --exclude 'tests' backend/     "$HOST:$BASE/backend/"
+rsync -az --delete --exclude '__pycache__' backend/     "$HOST:$BASE/backend/"
 rsync -az --delete                                              server-site/ "$HOST:$BASE/server-site/"
 rsync -az --delete                                              esp32-site/  "$HOST:$BASE/esp32-site/"
 rsync -az --delete                                              deploy/      "$HOST:$BASE/deploy/"
