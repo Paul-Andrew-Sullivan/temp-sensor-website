@@ -1,0 +1,5 @@
+.shots/
+__pycache__/
+*.pyc
+data/
+.env

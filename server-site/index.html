@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Two-sensor thermometer</title>
+<meta name="description" content="Live readings, a 300-second chart recorder and out-of-range alerts for the ECE:4880 two-sensor thermometer, reported by an ESP32 in the box.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,500;1,7..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+<main>
+<h1>Two-sensor thermometer</h1>
+<p class="status" id="boxline">Waiting for the first reading from the box.</p>
+<p class="status" id="demoline" hidden></p>
+
+<div class="hero">
+  <div id="model" aria-label="A thermometer whose red column follows the selected sensor"></div>
+  <div>
+    <div class="readings">
+      <div class="reading"><div class="val" id="t1">—</div><div class="lbl">Sensor 1</div></div>
+      <div class="reading"><div class="val" id="t2">—</div><div class="lbl">Sensor 2</div></div>
+    </div>
+    <p class="units" style="margin-top:18px">Show in <span id="units"></span></p>
+    <p class="status" id="modelline"></p>
+  </div>
+</div>
+
+<h2>Display buttons on the box</h2>
+<p>Pressing these does the same as pressing the buttons on the box. A sensor whose button is off is not shown on the box's own screen, but is still measured and graphed here. The box picks the change up within half a second.</p>
+<button id="b1">Sensor 1 display: on</button>
+<button id="b2">Sensor 2 display: on</button>
+
+<h2>Last 300 seconds</h2>
+<canvas id="chart" width="1880" height="560"></canvas>
+<p class="status">The graph moves left once a second. Missing data is hatched. A reading beyond the graph's range is drawn as a red line pinned to the top or bottom edge, so a broken sensor never looks like a hot one.</p>
+
+<h2>Email or text when it goes out of range</h2>
+<p>The message goes out once when a sensor crosses a limit, and again only after it has come back inside the range by half a degree. For a text, use your carrier's email-to-SMS address, for example 3195551234@txt.att.net. Mail is sent by the server, so nobody needs to keep this page open.</p>
+<label for="email">Send to</label><input id="email" placeholder="name@example.com" autocomplete="email">
+<div class="row">
+  <div><label for="max">Maximum, °C</label><input id="max" type="number" step="0.5"></div>
+  <div><label for="min">Minimum, °C</label><input id="min" type="number" step="0.5"></div>
+</div>
+<label for="maxMessage">Message when above the maximum</label><textarea id="maxMessage"></textarea>
+<label for="minMessage">Message when below the minimum</label><textarea id="minMessage"></textarea>
+<p style="margin-top:12px"><a href="#" id="save">Save these settings</a><span id="saved"></span></p>
+<p class="status" id="lastsent"></p>
+
+<footer>
+<p>The ESP32 in the box reads two DS18B20 probes on one-meter leads and posts to this server twice a second. The server keeps the last 300 seconds and sends the alerts. A leaner copy of this page, the one the board can serve by itself, is at <a href="https://thermo-esp32.paulandrewsullivan.com">thermo-esp32.paulandrewsullivan.com</a>.</p>
+<p>ECE:4880 Principles of ECE/CSE Design, Lab 1, fall 2026. Paul Sullivan and team. Built September 2026. Thermometer model by <a href="https://sketchfab.com/3d-models/thermometer-39a8561572e341a49cdbaa257321dd3a">Armature Studios on Sketchfab</a>, CC BY 4.0. Source on <a href="https://github.com/Paul-Andrew-Sullivan/temp-sensor-website">GitHub</a>.</p>
+</footer>
+</main>
+<script type="module" src="./app.js"></script>
+</body>
+</html>
