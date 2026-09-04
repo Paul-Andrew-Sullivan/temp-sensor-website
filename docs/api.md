@@ -12,15 +12,12 @@ The first four routes are the shared surface: the ESP32 in standalone mode serve
   "t": 1788363892889,
   "s1": { "temp": 21.4, "plugged": true, "on": true },
   "s2": { "temp": null, "plugged": false, "on": false },
-  "demo": false,
-  "scenario": null
 }
 ```
 
 - `box` is `"off"` when no report has arrived for 3 seconds. Then both `temp` values are `null` and both `plugged` are `false`.
 - `plugged: false` with `box: "on"` means that sensor is unplugged or faulty (the DS18B20 returned -127 or 85).
 - `on` is the sensor's display button. It reflects the last state the board reported, except for up to 2 seconds after a virtual press, when it shows the requested state.
-- `demo` and `scenario` exist only on the server backend.
 
 ## GET /api/history
 
@@ -50,10 +47,6 @@ Body `{ "sensor": 1, "on": false }`. Reply `{ "b1": true, "b2": false }` with th
 PUT accepts any subset of the first five fields. `max` must be greater than `min`. A blank `email` disables sending. Saving resets the per-sensor latches. `lastSent` is `null` until the first message.
 
 Alert rule: when a sensor reading goes above `max` (or below `min`) one message is sent. Nothing more is sent until that reading comes back inside the band by 0.5 °C, after which the next crossing sends again. Each sensor latches independently.
-
-## POST /api/demo (server only)
-
-Body `{ "on": true, "scenario": "high" }`, either key optional. Scenarios: `normal`, `unplugged1`, `unplugged2`, `boxoff`, `high`, `low`. Reply echoes `on`, `scenario`, and the list. Any real `/ingest` turns demo off.
 
 ## POST /ingest (server only, the board's route)
 

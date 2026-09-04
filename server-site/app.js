@@ -7,7 +7,6 @@ let unit = "C";
 try { unit = localStorage.getItem("unit") || "C"; } catch (e) { /* localStorage blocked */ }
 let box = "off", plugged = [false, false], on = [true, true], cur = [null, null], lastT = 0;
 let shown = 0; // which sensor the model shows
-let demo = { on: false, scenario: null };
 let dragged = false; // once the slider is touched, it drives the model until "follow live" is clicked
 const slider = $("slider");
 
@@ -39,26 +38,11 @@ function link(text, fn) {
   return a;
 }
 
-// The poll runs once a second, so these are built here and only have their
-// text and visibility touched in render(). Rebuilding them per tick used to
-// close the scenario menu while it was open.
+// The poll runs once a second, so the swap link is built here and only has
+// its text updated in render(), rather than being replaced on every tick.
 const modelText = document.createTextNode("");
 const swapLink = link("", () => { shown = 1 - shown; render(); });
 $("modelline").append(modelText, swapLink, ".");
-
-const scenarios = document.createElement("select");
-for (const s of ["normal", "unplugged1", "unplugged2", "boxoff", "high", "low"]) scenarios.add(new Option(s, s));
-scenarios.onchange = () => postDemo({ scenario: scenarios.value });
-
-const demoRunning = document.createElement("span");
-demoRunning.append("Showing demo data because no board has reported yet. ",
-  link("Turn demo off", () => postDemo({ on: false })), ". Scenario: ", scenarios);
-
-const demoIdle = document.createElement("span");
-demoIdle.append("No board is reporting. ",
-  link("Turn demo data on", () => postDemo({ on: true })), " to see the page working.");
-
-$("demoline").append(demoRunning, demoIdle);
 
 function render() {
   const bl = $("boxline");
@@ -89,13 +73,6 @@ function render() {
   }
   modelText.nodeValue = "The thermometer shows sensor " + (shown + 1) + ". ";
   swapLink.textContent = "Show sensor " + (2 - shown) + " instead";
-
-  demoRunning.hidden = !demo.on;
-  demoIdle.hidden = demo.on || box !== "off";
-  $("demoline").hidden = demoRunning.hidden && demoIdle.hidden;
-  // leave the menu alone unless the server disagrees with it, so picking a
-  // scenario is not undone by the next poll
-  if (demo.on && demo.scenario && scenarios.value !== demo.scenario) scenarios.value = demo.scenario;
 }
 
 slider.addEventListener("input", () => {
@@ -110,7 +87,6 @@ slider.addEventListener("input", () => {
 function postJSON(url, body, method = "POST") {
   return fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json());
 }
-function postDemo(body) { postJSON("/api/demo", body).then(() => state()); }
 function press(i) { postJSON("/api/button", { sensor: i + 1, on: !on[i] }).then((j) => { on = [j.b1, j.b2]; render(); }); }
 $("b1").onclick = () => press(0);
 $("b2").onclick = () => press(1);
@@ -121,7 +97,6 @@ function history() {
 function state() {
   fetch("/api/state").then((r) => r.json()).then((j) => {
     box = j.box; plugged = [j.s1.plugged, j.s2.plugged]; on = [j.s1.on, j.s2.on]; cur = [j.s1.temp, j.s2.temp];
-    demo = { on: j.demo, scenario: j.scenario };
     const gap = lastT && j.t - lastT > 2500;
     lastT = j.t;
     chart.push(cur[0], cur[1]);

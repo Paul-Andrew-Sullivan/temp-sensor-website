@@ -7,14 +7,14 @@ ECE:4880 Lab 1, fall 2026. The computer-side interface for a two-sensor thermome
 | Server site | https://thermo.paulandrewsullivan.com | Full page: 3D thermometer with a try-it slider, readings, virtual buttons, 300 s chart recorder. Alert settings are built but hidden for now. Backed by `backend/`. |
 | ESP32 page | https://thermo-esp32.paulandrewsullivan.com | The single lean file the board can serve by itself (no external assets, under 10 KB). Hosted here as a mirror against the same backend. |
 
-Until a board reports in, the backend generates demo readings and the pages say so. The page has a scenario picker (normal, unplugged sensor, box off, off-scale high, off-scale low) for checking each required display state.
+Both pages read "No data available" until a board posts to `/ingest`. See **The board** below.
 
 ## Layout
 
 ```
 esp32-site/     index.html — the lean page, one file, inline CSS and JS
 server-site/    index.html, styles.css, app.js, chart.js, thermo3d.js, vendor/ (three.js r160), models/thermometer.glb
-backend/        server.py (HTTP API), state.py (ring buffer, buttons), alerts.py (thresholds, Resend), demo.py
+backend/        server.py (HTTP API), state.py (ring buffer, buttons), alerts.py (thresholds, Resend)
 deploy/         nginx configs, container run scripts, deploy.sh, env.example
 docs/           design.md, plan.md, api.md, resend.md
 ```

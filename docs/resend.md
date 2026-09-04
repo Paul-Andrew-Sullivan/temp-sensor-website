@@ -17,4 +17,12 @@ Until the domain is verified, Resend only lets you send from `onboarding@resend.
 
 Text messages: put the phone's carrier gateway address in "Send to", for example `3195551234@txt.att.net`, `3195551234@vtext.com` (Verizon), `3195551234@tmomail.net` (T-Mobile). Carriers deliver these as SMS, usually within a minute.
 
-Test without hardware: turn demo on, pick the `high` scenario, set the maximum to 40. Sensor 1 climbs past it within a couple of minutes and the page's "Last message sent" line updates. Delivery failures are logged by `docker logs thermo-api`.
+Test without hardware: set the maximum to 40, then post a reading past it as if the board had.
+
+```bash
+curl -X POST http://localhost:8080/ingest \
+  -H "X-Probe-Token: $PROBE_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"s1": 45.0, "s2": 21.0, "b1": true, "b2": true}'
+```
+
+The page's "Last message sent" line updates. Post an in-range reading to rearm the latch. Delivery failures are logged by `docker logs thermo-api`.

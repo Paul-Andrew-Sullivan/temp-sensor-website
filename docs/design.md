@@ -43,7 +43,7 @@ The ESP32 in standalone mode and the server backend both expose the same read/co
 
 | Method | Path | Body / response |
 |---|---|---|
-| GET | `/api/state` | `{ "box": "on"\|"off", "t": <unix ms>, "s1": {"temp": 21.4\|null, "plugged": true, "on": true}, "s2": {...}, "demo": false }` |
+| GET | `/api/state` | `{ "box": "on"\|"off", "t": <unix ms>, "s1": {"temp": 21.4\|null, "plugged": true, "on": true}, "s2": {...} }` |
 | GET | `/api/history` | `{ "t": <unix ms of newest>, "s1": [300 values, newest last, null = missing], "s2": [...] }` |
 | POST | `/api/button` | `{ "sensor": 1\|2, "on": true\|false }` → new state |
 | GET / PUT | `/api/alerts` | `{ "email": "", "max": 30, "min": 15, "maxMessage": "", "minMessage": "" }` (server backend only) |
@@ -53,7 +53,6 @@ Server-only:
 | Method | Path | Purpose |
 |---|---|---|
 | POST | `/ingest` | ESP32 client mode. Header `X-Probe-Token`. Body `{ "s1": 21.4\|null, "s2": null, "b1": true, "b2": false }`. Reply carries wanted button states `{ "b1": true, "b2": false }` so the board applies virtual presses on its next post (twice a second, so under 1 s). |
-| POST | `/api/demo` | `{ "on": true\|false, "scenario": "normal"\|"unplugged1"\|"unplugged2"\|"boxoff"\|"high"\|"low" }` toggles the built-in reading generator and picks what it simulates, used until hardware exists. The UI labels demo data plainly. |
 
 Temperatures travel in Celsius. Fahrenheit is a display choice made in the browser.
 
@@ -64,7 +63,6 @@ Temperatures travel in Celsius. Fahrenheit is a display choice made in the brows
 - Button state lives on the server. A virtual press changes the wanted state; the ESP32 reads it in the next ingest reply and confirms with its own `b1`/`b2` values.
 - Alerts: on every ingest, if a sensor reading exceeds `max` or drops under `min`, send once and hold until the reading returns inside the band (with 0.5 C hysteresis), then rearm. Delivery through the Resend HTTP API. The API key and sender address come from an env file on the server, never from git. Text delivery uses the carrier's email gateway address entered in the email field.
 - Alert settings persist to a JSON file in the container's data volume.
-- Demo mode: a generator produces two slow, plausible traces so both pages are alive before hardware exists. It is off as soon as a real ingest arrives and can be toggled from the page. Demo data is labeled.
 
 ## The two pages
 
@@ -91,7 +89,6 @@ Same information, same controls, plus:
 - Web fonts allowed here (Literata for headings and running text, a mono for digits), self-hosted or from Google Fonts.
 - The chart recorder is the same canvas code, wider.
 - Alerts section fully working, with a "last alert sent" line.
-- A small demo-mode line: "Showing demo data — no board has reported yet. Turn demo off" and the reverse.
 
 Motion is limited to the mercury easing and the chart scroll. No scroll effects, no hover lifts.
 
@@ -108,7 +105,7 @@ When the team moves to real hardware in client mode, the ESP32 posts to `https:/
 ## Testing
 
 - Backend: unit tests with `unittest` for the ring buffer, box-off detection, alert hysteresis, and the ingest/state/history/button handlers using the stdlib test client.
-- Pages: opened in a real browser against the backend in demo mode, checked for the five states (normal, unplugged one sensor, box off, off-scale high, off-scale low) by driving the demo generator's `scenario` through `/api/demo`.
+- Pages: opened in a real browser against the backend, checked for the five display states (normal, unplugged one sensor, box off, off-scale high, off-scale low) by posting the matching readings to `/ingest` with curl.
 - Deployment: curl through the Cloudflare edge for both hosts and `/api/state`.
 
 ## Out of scope for this pass

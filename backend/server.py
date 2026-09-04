@@ -2,7 +2,7 @@
 
 Run:  python3 server.py
 Env:  PORT (8080), DATA_DIR (./data), PROBE_TOKEN, RESEND_API_KEY,
-      ALERT_FROM, DEMO_DEFAULT (1 = start in demo mode), STATIC_DIR
+      ALERT_FROM, STATIC_DIR
       (optional: serve a site folder alongside the API for local checks).
 """
 
@@ -15,14 +15,13 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from alerts import AlertConfig, AlertMonitor, resend_sender
-from demo import Demo, SCENARIOS
 from state import ProbeState
 
 
 class App:
     """Everything the handler needs, behind one lock."""
 
-    def __init__(self, data_dir, probe_token, sender, demo_default=True, static_dir=None):
+    def __init__(self, data_dir, probe_token, sender, static_dir=None):
         os.makedirs(data_dir, exist_ok=True)
         self.lock = threading.Lock()
         self.data_dir = data_dir
@@ -32,8 +31,6 @@ class App:
         self.state = ProbeState()
         self.alert_config = AlertConfig.load(self.alerts_path)
         self.monitor = AlertMonitor(self.alert_config, sender)
-        self.demo = Demo("normal")
-        self.demo.on = bool(demo_default)
         self.started = time.time()
 
     # -- sampling loop ----------------------------------------------------
@@ -41,11 +38,6 @@ class App:
     def sample_once(self, now=None):
         now = time.time() if now is None else now
         with self.lock:
-            if self.demo.on and not self.demo.box_absent():
-                s1, s2 = self.demo.sample(now)
-                # The fake board always does what it is told.
-                b1, b2 = self.state.wanted_buttons
-                self._ingest(s1, s2, b1, b2, now)
             self.state.tick(now)
 
     def run_sampler(self):
@@ -67,10 +59,7 @@ class App:
 
     def get_state(self):
         with self.lock:
-            body = self.state.state(time.time())
-            body["demo"] = self.demo.on
-            body["scenario"] = self.demo.scenario if self.demo.on else None
-            return 200, body
+            return 200, self.state.state(time.time())
 
     def get_history(self):
         with self.lock:
@@ -108,26 +97,12 @@ class App:
             body["lastSent"] = self.monitor.last_sent
             return 200, body
 
-    def post_demo(self, data):
-        if not isinstance(data, dict):
-            return 400, {"error": "body must be an object"}
-        with self.lock:
-            if "scenario" in data:
-                try:
-                    self.demo.scenario = data["scenario"]
-                except ValueError as exc:
-                    return 400, {"error": str(exc), "scenarios": list(SCENARIOS)}
-            if "on" in data:
-                self.demo.on = bool(data["on"])
-            return 200, {"on": self.demo.on, "scenario": self.demo.scenario, "scenarios": list(SCENARIOS)}
-
     def post_ingest(self, data, token):
         if not self.probe_token or token != self.probe_token:
             return 401, {"error": "bad or missing X-Probe-Token"}
         if not isinstance(data, dict):
             return 400, {"error": "body must be an object"}
         with self.lock:
-            self.demo.on = False
             reply = self._ingest(data.get("s1"), data.get("s2"), data.get("b1", True), data.get("b2", True), time.time())
             return 200, reply
 
@@ -213,8 +188,6 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(400, {"error": "body must be JSON"})
         if path == "/api/button":
             return self._json(*self.app.post_button(data))
-        if path == "/api/demo":
-            return self._json(*self.app.post_demo(data))
         if path == "/ingest":
             return self._json(*self.app.post_ingest(data, self.headers.get("X-Probe-Token")))
         return self._json(404, {"error": "not found"})
@@ -245,13 +218,12 @@ def main():
         data_dir=data_dir,
         probe_token=token,
         sender=sender,
-        demo_default=os.environ.get("DEMO_DEFAULT", "1") == "1",
         static_dir=os.environ.get("STATIC_DIR") or None,
     )
     threading.Thread(target=app.run_sampler, daemon=True).start()
     port = int(os.environ.get("PORT", "8080"))
     httpd = make_server(app, port=port)
-    print(f"thermo api on :{port} (demo={'on' if app.demo.on else 'off'})", flush=True)
+    print(f"thermo api on :{port}", flush=True)
     httpd.serve_forever()
 
 
