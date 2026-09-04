@@ -6,9 +6,14 @@ export const N = 300;
 export const YMIN = 10;
 export const YMAX = 50;
 
+const INK = "#1a1a1a";
+const FAINT = "#6b675f";
+const RULE = "#cfcac0";
+const HATCH = "#e2ded6";
+const RED = "#b3261e";
+
 export function makeChart(canvas, opts = {}) {
   const cx = canvas.getContext("2d");
-  const colors = Object.assign({ ink: "#1a1a1a", faint: "#6b675f", rule: "#cfcac0", hatch: "#e2ded6", red: "#b3261e" }, opts.colors || {});
   let unit = opts.unit || "C";
   let series = [new Array(N).fill(null), new Array(N).fill(null)];
 
@@ -19,7 +24,7 @@ export function makeChart(canvas, opts = {}) {
     cx.beginPath();
     cx.rect(x, y, w, h);
     cx.clip();
-    cx.strokeStyle = colors.hatch;
+    cx.strokeStyle = HATCH;
     cx.lineWidth = 2;
     for (let d = -h; d < w; d += 12) {
       cx.beginPath();
@@ -32,7 +37,7 @@ export function makeChart(canvas, opts = {}) {
 
   function offscale(x, w, y) {
     cx.save();
-    cx.fillStyle = colors.red;
+    cx.fillStyle = RED;
     cx.fillRect(x - w / 2, y - 3, w + 1, 6);
     cx.restore();
   }
@@ -43,8 +48,8 @@ export function makeChart(canvas, opts = {}) {
     const pw = W - L - R, ph = H - T - B;
     cx.clearRect(0, 0, W, H);
     cx.font = "24px Literata, Georgia, serif";
-    cx.fillStyle = colors.faint;
-    cx.strokeStyle = colors.rule;
+    cx.fillStyle = FAINT;
+    cx.strokeStyle = RULE;
     cx.lineWidth = 2;
 
     const lo = f(YMIN), hi = f(YMAX);
@@ -76,7 +81,7 @@ export function makeChart(canvas, opts = {}) {
       }
     }
 
-    const lineColors = [colors.ink, colors.faint];
+    const lineColors = [INK, FAINT];
     for (let si = 0; si < 2; si++) {
       cx.strokeStyle = lineColors[si];
       cx.lineWidth = si ? 2.5 : 3.5;
@@ -95,8 +100,8 @@ export function makeChart(canvas, opts = {}) {
       cx.stroke();
       cx.setLineDash([]);
     }
-    cx.fillStyle = colors.ink; cx.textAlign = "left"; cx.fillText("— sensor 1", L, T - 8);
-    cx.fillStyle = colors.faint; cx.fillText("- - sensor 2", L + 150, T - 8);
+    cx.fillStyle = INK; cx.textAlign = "left"; cx.fillText("— sensor 1", L, T - 8);
+    cx.fillStyle = FAINT; cx.fillText("- - sensor 2", L + 150, T - 8);
   }
 
   return {
