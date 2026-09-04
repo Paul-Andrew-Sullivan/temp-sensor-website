@@ -4,7 +4,7 @@ import { makeThermometer } from "./thermo3d.js";
 const $ = (id) => document.getElementById(id);
 
 let unit = "C";
-try { unit = localStorage.getItem("unit") || "C"; } catch (e) { /* private mode */ }
+try { unit = localStorage.getItem("unit") || "C"; } catch (e) { /* localStorage blocked */ }
 let box = "off", plugged = [false, false], on = [true, true], cur = [null, null], lastT = 0;
 let shown = 0; // which sensor the model shows
 let demo = { on: false, scenario: null };
@@ -27,9 +27,38 @@ $("units").addEventListener("click", (e) => {
   if (!u) return;
   e.preventDefault();
   unit = u;
-  try { localStorage.setItem("unit", u); } catch (err) { /* ignore */ }
+  try { localStorage.setItem("unit", u); } catch (err) { /* localStorage blocked */ }
   drawUnits(); render(); chart.setUnit(unit);
 });
+
+function link(text, fn) {
+  const a = document.createElement("a");
+  a.href = "#";
+  a.textContent = text;
+  a.onclick = (e) => { e.preventDefault(); fn(); };
+  return a;
+}
+
+// The poll runs once a second, so these are built here and only have their
+// text and visibility touched in render(). Rebuilding them per tick used to
+// close the scenario menu while it was open.
+const modelText = document.createTextNode("");
+const swapLink = link("", () => { shown = 1 - shown; render(); });
+$("modelline").append(modelText, swapLink, ".");
+
+const scenarios = document.createElement("select");
+for (const s of ["normal", "unplugged1", "unplugged2", "boxoff", "high", "low"]) scenarios.add(new Option(s, s));
+scenarios.onchange = () => postDemo({ scenario: scenarios.value });
+
+const demoRunning = document.createElement("span");
+demoRunning.append("Showing demo data because no board has reported yet. ",
+  link("Turn demo off", () => postDemo({ on: false })), ". Scenario: ", scenarios);
+
+const demoIdle = document.createElement("span");
+demoIdle.append("No board is reporting. ",
+  link("Turn demo data on", () => postDemo({ on: true })), " to see the page working.");
+
+$("demoline").append(demoRunning, demoIdle);
 
 function render() {
   const bl = $("boxline");
@@ -58,30 +87,15 @@ function render() {
     thermo.setTemp(cur[shown]);
     slider.value = cur[shown];
   }
-  $("modelline").innerHTML = "The thermometer shows sensor " + (shown + 1) + ". "
-    + '<a href="#" id="swap">Show sensor ' + (2 - shown) + " instead</a>.";
-  $("swap").onclick = (e) => { e.preventDefault(); shown = 1 - shown; render(); };
-  // demo line
-  const d = $("demoline");
-  if (demo.on) {
-    d.hidden = false;
-    d.innerHTML = "Showing demo data because no board has reported yet. "
-      + '<a href="#" id="demooff">Turn demo off</a>. Scenario: <select id="scenario"></select>';
-    const sel = $("scenario");
-    for (const s of ["normal", "unplugged1", "unplugged2", "boxoff", "high", "low"]) {
-      const o = document.createElement("option");
-      o.value = s; o.textContent = s; o.selected = s === demo.scenario;
-      sel.appendChild(o);
-    }
-    sel.onchange = () => postDemo({ scenario: sel.value });
-    $("demooff").onclick = (e) => { e.preventDefault(); postDemo({ on: false }); };
-  } else if (demo.on === false && box === "off") {
-    d.hidden = false;
-    d.innerHTML = 'No board is reporting. <a href="#" id="demoon">Turn demo data on</a> to see the page working.';
-    $("demoon").onclick = (e) => { e.preventDefault(); postDemo({ on: true }); };
-  } else {
-    d.hidden = true;
-  }
+  modelText.nodeValue = "The thermometer shows sensor " + (shown + 1) + ". ";
+  swapLink.textContent = "Show sensor " + (2 - shown) + " instead";
+
+  demoRunning.hidden = !demo.on;
+  demoIdle.hidden = demo.on || box !== "off";
+  $("demoline").hidden = demoRunning.hidden && demoIdle.hidden;
+  // leave the menu alone unless the server disagrees with it, so picking a
+  // scenario is not undone by the next poll
+  if (demo.on && demo.scenario && scenarios.value !== demo.scenario) scenarios.value = demo.scenario;
 }
 
 slider.addEventListener("input", () => {
@@ -137,4 +151,3 @@ $("save").onclick = (e) => {
 drawUnits(); render(); history(); state(); alerts();
 setInterval(state, 1000);
 setInterval(history, 30000);
-setInterval(alerts, 15000);
