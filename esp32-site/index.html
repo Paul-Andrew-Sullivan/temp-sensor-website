@@ -6,94 +6,92 @@
 <title>Two-sensor thermometer</title>
 <link rel="icon" href="data:,">
 <style>
-:root{--ink:#1a1a1a;--paper:#fff;--rule:#cfcac0;--faint:#6b675f;--red:#b3261e}
-*{box-sizing:border-box}
-body{margin:0;background:var(--paper);color:var(--ink);font:17px/1.5 Georgia,"Times New Roman",serif}
-main{max-width:920px;margin:0 auto;padding:36px 20px 60px}
-h1{font-size:34px;line-height:1.15;margin:0 0 6px;font-weight:normal}
-h2{font-size:19px;margin:44px 0 12px;font-weight:normal;border-top:1px solid var(--rule);padding-top:14px}
-p{margin:0 0 10px;max-width:62ch}
-.status{color:var(--faint)}
-.status.off{color:var(--red)}
-.readings{display:flex;flex-wrap:wrap;gap:12px 56px;margin:26px 0 6px}
-.reading{min-width:240px}
-.reading .val{font:56px/1 "SF Mono",Menlo,Consolas,"Liberation Mono",monospace;letter-spacing:-.02em;white-space:nowrap}
-.reading .val.msg{font:italic 24px/1.3 Georgia,serif;color:var(--faint);padding:14px 0 12px}
-.reading .val.msg.bad{color:var(--red)}
-.reading .lbl{margin-top:8px;color:var(--faint)}
-.units a,.units b{margin-right:10px}
-a{color:var(--ink)}
-button{font:inherit;background:var(--ink);color:var(--paper);border:0;border-radius:0;padding:9px 16px;margin:6px 12px 6px 0;cursor:pointer}
-button.off{background:var(--paper);color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
-canvas{display:block;width:100%;max-width:900px;height:auto}
-label{display:block;margin:10px 0 2px;color:var(--faint)}
-input,textarea{font:inherit;width:100%;max-width:520px;padding:6px 8px;border:1px solid var(--rule);border-radius:0;background:var(--paper);color:var(--ink)}
-textarea{height:64px}
-.row{display:flex;gap:24px;flex-wrap:wrap}.row>div{flex:1;min-width:140px;max-width:200px}
-#saved{color:var(--faint);margin-left:12px}
-footer{margin-top:60px;padding-top:14px;border-top:1px solid var(--rule);color:var(--faint);font-size:15px}
+body { max-width: 40em; margin: 2em auto; padding: 0 1em; }
+dd { margin: 0 0 1em; font-family: monospace; font-size: 2.5em; }
+dd.msg { font-family: inherit; font-size: 1em; }
+canvas { width: 100%; height: auto; }
+.off { color: #c00; }
 </style>
 </head>
 <body>
-<main>
-<h1>Two-sensor thermometer</h1>
-<p class="status" id="boxline">Waiting for the first reading from the box.</p>
 
-<div class="readings">
-  <div class="reading"><div class="val" id="t1">—</div><div class="lbl">Sensor 1</div></div>
-  <div class="reading"><div class="val" id="t2">—</div><div class="lbl">Sensor 2</div></div>
-</div>
-<p class="units">Show in <span id="units"></span></p>
+<h1>Two-sensor thermometer</h1>
+<p id="boxline">Waiting for the first reading from the box.</p>
+
+<dl>
+<dt>Sensor 1</dt>
+<dd id="t1">&mdash;</dd>
+<dt>Sensor 2</dt>
+<dd id="t2">&mdash;</dd>
+</dl>
+
+<p>Show in <span id="units"></span></p>
 
 <h2>Display buttons on the box</h2>
 <p>Pressing these does the same as pressing the buttons on the box. A sensor whose button is off is not shown on the box's own screen, but is still measured and graphed here.</p>
+<p>
 <button id="b1">Sensor 1 display: on</button>
 <button id="b2">Sensor 2 display: on</button>
+</p>
 
 <h2>Last 300 seconds</h2>
 <canvas id="chart" width="1800" height="520"></canvas>
-<p class="status">The graph moves left once a second. Missing data is hatched. A reading beyond the graph's range is drawn as a red line pinned to the top or bottom edge.</p>
+<p>The graph moves left once a second. Missing data is hatched. A reading beyond the graph's range is drawn as a red line pinned to the top or bottom edge.</p>
 
 <section id="alerts" hidden>
 <h2>Email or text when it goes out of range</h2>
 <p>The message goes out once when a sensor crosses a limit, and again only after it has come back inside the range. For a text, use your carrier's email-to-SMS address, for example 3195551234@txt.att.net.</p>
-<label for="email">Send to</label><input id="email" placeholder="name@example.com" autocomplete="email">
-<div class="row">
-  <div><label for="max">Maximum, °C</label><input id="max" type="number" step="0.5"></div>
-  <div><label for="min">Minimum, °C</label><input id="min" type="number" step="0.5"></div>
-</div>
-<label for="maxMessage">Message when above the maximum</label><textarea id="maxMessage"></textarea>
-<label for="minMessage">Message when below the minimum</label><textarea id="minMessage"></textarea>
-<p style="margin-top:12px"><a href="#" id="save">Save these settings</a><span id="saved"></span></p>
-<p class="status" id="lastsent"></p>
+<p>
+<label for="email">Send to</label>
+<input id="email" placeholder="name@example.com" autocomplete="email" size="32">
+</p>
+<p>
+<label for="max">Maximum, &deg;C</label>
+<input id="max" type="number" step="0.5">
+<label for="min">Minimum, &deg;C</label>
+<input id="min" type="number" step="0.5">
+</p>
+<p>
+<label for="maxMessage">Message when above the maximum</label><br>
+<textarea id="maxMessage" rows="2" cols="48"></textarea>
+</p>
+<p>
+<label for="minMessage">Message when below the minimum</label><br>
+<textarea id="minMessage" rows="2" cols="48"></textarea>
+</p>
+<p><a href="#" id="save">Save these settings</a> <span id="saved"></span></p>
+<p id="lastsent"></p>
 </section>
+
+<hr>
 
 <footer>
 <p id="served">This page and its data are served by the ESP32 in the box. Two DS18B20 probes on one-meter leads feed it.</p>
 <p>ECE:4880 Principles of ECE/CSE Design, Lab 1, fall 2026. Paul Sullivan and team. Built September 2026.</p>
 </footer>
-</main>
+
 <script>
 (function(){
 var N=300,YMIN=10,YMAX=50;
+var INK='#000',FAINT='#767676',RULE='#ccc',HATCH='#ddd',RED='#c00';
 var s=[new Array(N).fill(null),new Array(N).fill(null)];
 var unit=localStorage.getItem('unit')||'C';
 var box='off',plugged=[false,false],on=[true,true],lastT=0,cur=[null,null];
 var $=function(i){return document.getElementById(i)};
 function f(c){return unit==='F'?c*9/5+32:c}
-function fmt(c){var v=f(c);return v.toFixed(1)+' °'+unit}
+function fmt(c){var v=f(c);return v.toFixed(1)+' °'+unit}
 function drawUnits(){$('units').innerHTML=(unit==='C'?'<b>°C</b> <a href="#" data-u="F">°F</a>':'<a href="#" data-u="C">°C</a> <b>°F</b>')}
 $('units').addEventListener('click',function(e){var u=e.target.getAttribute('data-u');if(!u)return;e.preventDefault();unit=u;localStorage.setItem('unit',u);drawUnits();render();draw()});
 function render(){
   var bl=$('boxline');
-  if(box==='off'){bl.textContent='No data available. The box is switched off or not reachable.';bl.className='status off'}
-  else{bl.textContent='The box is on and reporting once a second.';bl.className='status'}
+  if(box==='off'){bl.textContent='No data available. The box is switched off or not reachable.';bl.className='off'}
+  else{bl.textContent='The box is on and reporting once a second.';bl.className=''}
   for(var i=0;i<2;i++){
     var el=$('t'+(i+1));
-    if(box==='off'){el.textContent='no data available';el.className='val msg'}
-    else if(!plugged[i]){el.textContent='unplugged sensor';el.className='val msg bad'}
-    else{el.textContent=fmt(cur[i]);el.className='val'}
-    var b=$('b'+(i+1));b.textContent='Sensor '+(i+1)+' display: '+(on[i]?'on':'off');b.className=on[i]?'':'off';
+    if(box==='off'){el.textContent='no data available';el.className='msg'}
+    else if(!plugged[i]){el.textContent='unplugged sensor';el.className='msg off'}
+    else{el.textContent=fmt(cur[i]);el.className=''}
+    $('b'+(i+1)).textContent='Sensor '+(i+1)+' display: '+(on[i]?'on':'off');
   }
 }
 function press(i){fetch('/api/button',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sensor:i+1,on:!on[i]})}).then(function(r){return r.json()}).then(function(j){on=[j.b1,j.b2];render()})}
@@ -108,14 +106,14 @@ function state(){fetch('/api/state').then(function(r){return r.json()}).then(fun
 var cv=$('chart'),cx=cv.getContext('2d');
 function draw(){
   var W=cv.width,H=cv.height,L=110,R=30,T=30,B=70,pw=W-L-R,ph=H-T-B;
-  cx.clearRect(0,0,W,H);cx.font='24px Georgia,serif';cx.fillStyle='#6b675f';cx.strokeStyle='#cfcac0';cx.lineWidth=2;
+  cx.clearRect(0,0,W,H);cx.font='24px serif';cx.fillStyle=FAINT;cx.strokeStyle=RULE;cx.lineWidth=2;
   var lo=f(YMIN),hi=f(YMAX);
   for(var k=0;k<=4;k++){var y=T+ph*k/4;cx.beginPath();cx.moveTo(L,y);cx.lineTo(W-R,y);cx.stroke();var v=hi-(hi-lo)*k/4;cx.textAlign='right';cx.fillText(v.toFixed(0)+'°'+unit,L-14,y+8)}
   for(var sec=300;sec>=0;sec-=60){var x=L+pw*(1-sec/300);cx.beginPath();cx.moveTo(x,T);cx.lineTo(x,T+ph);cx.stroke();cx.textAlign='center';cx.fillText(sec,x,T+ph+34)}
   cx.fillText('seconds ago',L+pw/2,H-10);
   var colw=pw/N;
   var m=null;for(var i=0;i<N;i++){var miss=s[0][i]==null||s[1][i]==null;if(miss&&m===null)m=i;if((!miss||i===N-1)&&m!==null){var a=L+colw*m,b=L+colw*(miss?i+1:i);hatch(a,T,b-a,ph);m=null}}
-  var cols=['#1a1a1a','#6b675f'];
+  var cols=[INK,FAINT];
   for(var si=0;si<2;si++){
     cx.strokeStyle=cols[si];cx.lineWidth=si?2.5:3.5;cx.setLineDash(si?[8,6]:[]);cx.beginPath();var pen=false;
     for(var j=0;j<N;j++){var v=s[si][j];if(v==null){pen=false;continue}
@@ -123,9 +121,9 @@ function draw(){
       var y=T+ph*(1-(v-YMIN)/(YMAX-YMIN));if(pen)cx.lineTo(x,y);else cx.moveTo(x,y);pen=true}
     cx.stroke();cx.setLineDash([]);
   }
-  cx.fillStyle='#1a1a1a';cx.textAlign='left';cx.fillText('— sensor 1',L,T-8);cx.fillStyle='#6b675f';cx.fillText('- - sensor 2',L+150,T-8);
-  function hatch(x,y,w,h){cx.save();cx.beginPath();cx.rect(x,y,w,h);cx.clip();cx.strokeStyle='#e2ded6';cx.lineWidth=2;for(var d=-h;d<w;d+=12){cx.beginPath();cx.moveTo(x+d,y+h);cx.lineTo(x+d+h,y);cx.stroke()}cx.restore()}
-  function offscale(x,w,y){cx.save();cx.fillStyle='#b3261e';cx.fillRect(x-w/2,y-3,w+1,6);cx.restore()}
+  cx.fillStyle=INK;cx.textAlign='left';cx.fillText('— sensor 1',L,T-8);cx.fillStyle=FAINT;cx.fillText('- - sensor 2',L+150,T-8);
+  function hatch(x,y,w,h){cx.save();cx.beginPath();cx.rect(x,y,w,h);cx.clip();cx.strokeStyle=HATCH;cx.lineWidth=2;for(var d=-h;d<w;d+=12){cx.beginPath();cx.moveTo(x+d,y+h);cx.lineTo(x+d+h,y);cx.stroke()}cx.restore()}
+  function offscale(x,w,y){cx.save();cx.fillStyle=RED;cx.fillRect(x-w/2,y-3,w+1,6);cx.restore()}
 }
 function alerts(){fetch('/api/alerts').then(function(r){if(!r.ok)throw 0;return r.json()}).then(function(j){
   $('alerts').hidden=false;$('email').value=j.email;$('max').value=j.max;$('min').value=j.min;$('maxMessage').value=j.maxMessage;$('minMessage').value=j.minMessage;
