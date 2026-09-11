@@ -1,0 +1,460 @@
+// The page the board serves at "/". This is esp32-site/index.html from the
+// repo, stored in flash as one raw string. Keep the two files identical.
+const char PAGE[] PROGMEM = R"HTML(
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Two-sensor thermometer</title>
+<link rel="icon" href="data:,">
+<style>
+body { max-width: 40em; margin: 2em auto; padding: 0 1em; }
+dd { margin: 0 0 1em; font-family: monospace; font-size: 2.5em; }
+dd.msg { font-family: inherit; font-size: 1em; }
+canvas { width: 100%; height: auto; }
+.off { color: #c00; }
+</style>
+</head>
+<body>
+
+<h1>Two-sensor thermometer</h1>
+<p id="boxline" hidden>The box is on and reporting once a second.</p>
+
+<dl>
+<dt>Sensor 1</dt>
+<dd id="t1">&mdash;</dd>
+<dt>Sensor 2</dt>
+<dd id="t2">&mdash;</dd>
+</dl>
+
+<p>Show in <span id="units"></span></p>
+
+<h2>Display buttons on the box</h2>
+<p>
+<button id="b1">Sensor 1 display: on</button>
+<button id="b2">Sensor 2 display: on</button>
+</p>
+
+<h2>Last 300 seconds</h2>
+<canvas id="chart" width="1800" height="520"></canvas>
+
+<section id="alerts">
+<h2>Email or text when it goes out of range</h2>
+<p>
+<label for="email">Send to</label>
+<input id="email" placeholder="name@example.com" autocomplete="email" size="32">
+</p>
+<p>
+<label for="max">Maximum, &deg;C</label>
+<input id="max" type="number" step="0.5">
+<label for="min">Minimum, &deg;C</label>
+<input id="min" type="number" step="0.5">
+</p>
+<p>
+<label for="maxMessage">Message when above the maximum</label><br>
+<textarea id="maxMessage" rows="2" cols="48"></textarea>
+</p>
+<p>
+<label for="minMessage">Message when below the minimum</label><br>
+<textarea id="minMessage" rows="2" cols="48"></textarea>
+</p>
+<p><a href="#" id="save">Save these settings</a> <span id="saved"></span></p>
+<p id="lastsent"></p>
+</section>
+
+<script>
+(function () {
+  // Lab 1, ECE:4880. Two DS18B20 probes share one one-wire bus on the box. The
+  // ESP32 reads them once a second, so that is how often this page asks.
+  var HISTORY = 300;            // five minutes of one-second samples
+  var LOW_C = 10;               // the band the graph draws. Outside it the
+  var HIGH_C = 50;              // reading gets pegged to an edge instead.
+
+  var BLUE = '#15577f';         // probe 1
+  var ORANGE = '#b35900';       // probe 2
+  var GREY = '#767676';
+  var GRID = '#ccc';
+  var HATCH = '#ddd';
+  var RED = '#c00';
+
+  // ?sample on the address, or the file opened straight off disk, makes the
+  // page invent readings and never talk to the box at all. That is how it gets
+  // shown at the check-in, where the graph has to be scrolling with data on it.
+  // Without the flag it asks the box first and only invents readings once the
+  // box turns out to have nothing, so the graph is never sitting there empty.
+  var alwaysFake = /[?&]sample/.test(location.search) || location.protocol === 'file:';
+  var faking = alwaysFake;
+
+  var log = [blankLog(), blankLog()];
+  var reading = [null, null];
+  var probeIn = [false, false];   // false = nothing on that slot of the bus
+  var lcdLine = [true, true];     // matches the two buttons next to the LCD
+  var stampOfLast = 0;
+  var unit = localStorage.getItem('unit') || 'C';
+
+  var boxLine = document.getElementById('boxline');
+  var big = [document.getElementById('t1'), document.getElementById('t2')];
+  var lcdButton = [document.getElementById('b1'), document.getElementById('b2')];
+  var unitPick = document.getElementById('units');
+  var graph = document.getElementById('chart');
+  var g = graph.getContext('2d');
+
+  function blankLog() {
+    return new Array(HISTORY).fill(null);
+  }
+
+  function inUnit(c) { return unit === 'F' ? c * 9 / 5 + 32 : c; }
+  function withUnit(c) { return inUnit(c).toFixed(1) + ' °' + unit; }
+
+  function writeUnitPick() {
+    unitPick.innerHTML = unit === 'C'
+      ? '<b>°C</b> <a href="#" data-u="F">°F</a>'
+      : '<a href="#" data-u="C">°C</a> <b>°F</b>';
+  }
+
+  unitPick.addEventListener('click', function (e) {
+    var want = e.target.getAttribute('data-u');
+    if (!want) return;
+
+    e.preventDefault();
+    unit = want;
+    localStorage.setItem('unit', want);
+
+    writeUnitPick();
+    showNumbers();
+    drawGraph();
+  });
+
+  function showNumbers() {
+    boxLine.hidden = faking;
+
+    for (var i = 0; i < 2; i++) {
+      if (probeIn[i]) {
+        big[i].textContent = withUnit(reading[i]);
+        big[i].className = '';
+      } else {
+        big[i].textContent = 'unplugged sensor';
+        big[i].className = 'msg off';
+      }
+
+      lcdButton[i].textContent =
+        'Sensor ' + (i + 1) + ' display: ' + (lcdLine[i] ? 'on' : 'off');
+    }
+  }
+
+  // The box has a button per probe beside the LCD, and these do the same thing
+  // over the network. With no box on the other end there is nobody to ask, so
+  // they just flip here and the label follows.
+  function pressLcdButton(i) {
+    if (faking) {
+      lcdLine[i] = !lcdLine[i];
+      showNumbers();
+      return;
+    }
+
+    sendJSON('/api/button', 'POST', { sensor: i + 1, on: !lcdLine[i] })
+      .then(function (r) {
+        lcdLine = [r.b1, r.b2];
+        showNumbers();
+      });
+  }
+
+  lcdButton[0].onclick = function () { pressLcdButton(0); };
+  lcdButton[1].onclick = function () { pressLcdButton(1); };
+
+  // Two slow sine waves a few degrees apart, plus a small fast wobble so the
+  // trace does not come out suspiciously smooth.
+  function fakeAt(t) {
+    return [
+      22 + 3 * Math.sin(t / 40) + Math.sin(t * 1.7) * 0.1,
+      25 + 2 * Math.sin(t / 25 + 1) + Math.sin(t * 2.3) * 0.1
+    ];
+  }
+
+  function fakeReading() {
+    var now = Date.now();
+    var v = fakeAt(now / 1000);
+
+    return {
+      box: 'on',
+      t: now,
+      s1: { temp: v[0], plugged: true, on: lcdLine[0] },
+      s2: { temp: v[1], plugged: true, on: lcdLine[1] }
+    };
+  }
+
+  // Real and invented readings cannot share a trace, so whichever one takes
+  // over refills all 300 slots before anything gets drawn.
+  function setFaking(want) {
+    if (want === faking) return;
+    faking = want;
+    loadLog();
+  }
+
+  function getJSON(path) {
+    return fetch(path).then(function (r) {
+      if (!r.ok) throw new Error(r.status);
+      return r.json();
+    });
+  }
+
+  function sendJSON(path, method, body) {
+    return fetch(path, {
+      method: method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    }).then(function (r) { return r.json(); });
+  }
+
+  function take(state) {
+    probeIn = [state.s1.plugged, state.s2.plugged];
+    lcdLine = [state.s1.on, state.s2.on];
+    reading = [state.s1.temp, state.s2.temp];
+
+    // Two missed one-second samples leaves a hole that pushing one more value
+    // will not close, so the whole trace gets asked for again.
+    var missed = stampOfLast && state.t - stampOfLast > 2500;
+    stampOfLast = state.t;
+
+    for (var i = 0; i < 2; i++) {
+      log[i].push(reading[i]);
+      if (log[i].length > HISTORY) log[i].shift();
+    }
+
+    showNumbers();
+    drawGraph();
+    if (missed) loadLog();
+  }
+
+  function giveUpOnBox() {
+    setFaking(true);
+    take(fakeReading());
+  }
+
+  function askBox() {
+    if (alwaysFake) {
+      take(fakeReading());
+      return;
+    }
+
+    getJSON('/api/state').then(function (state) {
+      // box 'off' is the backend saying nothing has POSTed to /ingest yet.
+      if (state.box === 'off') {
+        giveUpOnBox();
+      } else {
+        setFaking(false);
+        take(state);
+      }
+    }).catch(giveUpOnBox);
+  }
+
+  function loadLog() {
+    if (faking) {
+      var now = Date.now() / 1000;
+
+      for (var i = 0; i < HISTORY; i++) {
+        var v = fakeAt(now - (HISTORY - 1 - i));
+        log[0][i] = v[0];
+        log[1][i] = v[1];
+      }
+
+      drawGraph();
+      return;
+    }
+
+    getJSON('/api/history').then(function (h) {
+      // askBox may have given up on the box while this was still in the air.
+      // Its invented trace is the newer answer, and dropping 300 nulls on top
+      // would blank the graph until the next reload came round.
+      if (faking) return;
+
+      log = [h.s1, h.s2];
+      drawGraph();
+    }).catch(function () {});
+  }
+
+  function drawGraph() {
+    var W = graph.width, H = graph.height;
+    var L = 110, R = 30, T = 30, B = 70;
+    var pw = W - L - R, ph = H - T - B;
+    var col = pw / HISTORY;
+
+    g.clearRect(0, 0, W, H);
+    g.font = '24px serif';
+    g.lineWidth = 2;
+
+    var lo = inUnit(LOW_C), hi = inUnit(HIGH_C);
+
+    for (var k = 0; k <= 4; k++) {
+      var y = T + ph * k / 4;
+
+      g.strokeStyle = GRID;
+      g.beginPath();
+      g.moveTo(L, y);
+      g.lineTo(W - R, y);
+      g.stroke();
+
+      g.fillStyle = GREY;
+      g.textAlign = 'right';
+      g.fillText((hi - (hi - lo) * k / 4).toFixed(0) + '°' + unit, L - 14, y + 8);
+    }
+
+    for (var s = HISTORY; s >= 0; s -= 60) {
+      var x = L + pw * (1 - s / HISTORY);
+
+      g.strokeStyle = GRID;
+      g.beginPath();
+      g.moveTo(x, T);
+      g.lineTo(x, T + ph);
+      g.stroke();
+
+      g.fillStyle = GREY;
+      g.textAlign = 'center';
+      g.fillText(s, x, T + ph + 34);
+    }
+
+    g.fillStyle = GREY;
+    g.textAlign = 'center';
+    g.fillText('seconds ago', L + pw / 2, H - 10);
+
+    hatchHoles(L, T, ph, col);
+
+    plot(log[0], BLUE, L, T, ph, col);
+    plot(log[1], ORANGE, L, T, ph, col);
+
+    g.textAlign = 'left';
+    g.fillStyle = BLUE;
+    g.fillText('— sensor 1', L, T - 8);
+    g.fillStyle = ORANGE;
+    g.fillText('— sensor 2', L + 150, T - 8);
+  }
+
+  // A probe that is unplugged, or that came back with -127 or 85, leaves a null
+  // in the log. Hatching those stretches stops a break in the line from being
+  // read as a flat temperature.
+  function hatchHoles(L, T, ph, col) {
+    var from = null;
+
+    for (var i = 0; i < HISTORY; i++) {
+      var hole = log[0][i] == null || log[1][i] == null;
+
+      if (hole && from === null) from = i;
+
+      if (from !== null && (!hole || i === HISTORY - 1)) {
+        var a = L + col * from;
+        var b = L + col * (hole ? i + 1 : i);
+        hatch(a, T, b - a, ph);
+        from = null;
+      }
+    }
+  }
+
+  function hatch(x, y, w, h) {
+    g.save();
+    g.beginPath();
+    g.rect(x, y, w, h);
+    g.clip();
+
+    g.strokeStyle = HATCH;
+    g.lineWidth = 2;
+
+    for (var d = -h; d < w; d += 12) {
+      g.beginPath();
+      g.moveTo(x + d, y + h);
+      g.lineTo(x + d + h, y);
+      g.stroke();
+    }
+
+    g.restore();
+  }
+
+  function plot(trace, colour, L, T, ph, col) {
+    g.strokeStyle = colour;
+    g.lineWidth = 3.5;
+    g.beginPath();
+
+    var down = false;   // pen on the paper
+
+    for (var i = 0; i < HISTORY; i++) {
+      var c = trace[i];
+      var x = L + col * (i + 0.5);
+
+      if (c == null) {
+        down = false;
+        continue;
+      }
+
+      if (c > HIGH_C || c < LOW_C) {
+        down = false;
+        peg(x, col, c > HIGH_C ? T : T + ph);
+        continue;
+      }
+
+      var y = T + ph * (1 - (c - LOW_C) / (HIGH_C - LOW_C));
+      if (down) g.lineTo(x, y); else g.moveTo(x, y);
+      down = true;
+    }
+
+    g.stroke();
+  }
+
+  function peg(x, col, y) {
+    g.save();
+    g.fillStyle = RED;
+    g.fillRect(x - col / 2, y - 3, col + 1, 6);
+    g.restore();
+  }
+
+  var field = {
+    email: document.getElementById('email'),
+    max: document.getElementById('max'),
+    min: document.getElementById('min'),
+    maxMessage: document.getElementById('maxMessage'),
+    minMessage: document.getElementById('minMessage')
+  };
+  var savedNote = document.getElementById('saved');
+  var sentNote = document.getElementById('lastsent');
+
+  // Only the server copy has anything behind /api/alerts. On the board it 404s,
+  // the fields stay empty, and saving says so rather than pretending.
+  function loadAlerts() {
+    getJSON('/api/alerts').then(function (a) {
+      for (var name in field) field[name].value = a[name];
+
+      sentNote.textContent = a.lastSent
+        ? 'Last message sent ' + new Date(a.lastSent.t).toLocaleString() +
+          ' for sensor ' + a.lastSent.sensor +
+          (a.lastSent.ok ? '.' : ', but delivery failed.')
+        : '';
+    }).catch(function () {});
+  }
+
+  document.getElementById('save').onclick = function (e) {
+    e.preventDefault();
+
+    var body = {};
+    for (var name in field) body[name] = field[name].value;
+
+    sendJSON('/api/alerts', 'PUT', body).then(function (r) {
+      savedNote.textContent = r.error ? 'Not saved: ' + r.error : 'Saved.';
+    }).catch(function () {
+      savedNote.textContent = 'Not saved. This copy of the page has nowhere to keep it.';
+    }).then(function () {
+      setTimeout(function () { savedNote.textContent = ''; }, 4000);
+    });
+  };
+
+  writeUnitPick();
+  drawGraph();
+  loadLog();
+  askBox();
+  loadAlerts();
+
+  setInterval(askBox, 1000);      // the box samples once a second
+  setInterval(loadLog, 30000);    // picks up anything the polling missed
+})();
+</script>
+</body>
+</html>
+)HTML";

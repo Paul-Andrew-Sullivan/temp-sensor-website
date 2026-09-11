@@ -16,6 +16,7 @@ esp32-site/     index.html — the lean page, one file, inline CSS and JS
 server-site/    index.html, styles.css, app.js, chart.js, thermo3d.js, vendor/ (three.js r160), models/thermometer.glb
 backend/        server.py (HTTP API), state.py (ring buffer, buttons), alerts.py (thresholds, Resend)
 deploy/         nginx configs, container run scripts, deploy.sh, env.example
+firmware/       thermo_box/ — the standalone sketch. thermo_simple/ — probes and LCD only
 docs/           design.md, plan.md, api.md, resend.md
 ```
 
@@ -36,9 +37,13 @@ No dependencies beyond Python 3.11+. `STATIC_DIR` makes the API serve a site fol
 ## The board
 
 - **Client mode** (server-hosted): post `{ "s1": 21.4, "s2": null, "b1": true, "b2": true }` to `https://thermo.paulandrewsullivan.com/ingest` with header `X-Probe-Token` twice a second. The reply carries the wanted button states. Details in `docs/api.md`.
-- **Standalone mode** (ESP32-hosted): serve `esp32-site/index.html` at `/` and implement `/api/state`, `/api/history`, `/api/button` as described in `docs/api.md`. Whenever the box is not reporting, the page draws made-up readings so the graph can be shown without hardware, and the first real reading replaces them. Opening the file from disk, or `?sample` on the address, pins it to made-up readings. The alert settings are always on the page; where there is no `/api/alerts` behind them they stay empty and saving says so.
+- **Standalone mode** (ESP32-hosted): `firmware/thermo_box/thermo_box.ino` does this. Open the folder in Arduino IDE (board "ESP32 Dev Module", libraries OneWire, DallasTemperature, LiquidCrystal), flash it, join the board's Wi-Fi network `thermo-box` and open http://192.168.4.1. `page.h` holds `esp32-site/index.html` as a raw string; after editing the page, rebuild it with
 
-Firmware is not in this repo yet.
+  ```bash
+  { printf '// The page the board serves at "/". This is esp32-site/index.html from the\n// repo, stored in flash as one raw string. Keep the two files identical.\nconst char PAGE[] PROGMEM = R"HTML(\n'; cat esp32-site/index.html; printf ')HTML";\n'; } > firmware/thermo_box/page.h
+  ```
+
+  The API it serves is the one in `docs/api.md`. Whenever the box is not reporting, the page draws made-up readings so the graph can be shown without hardware, and the first real reading replaces them. Opening the file from disk, or `?sample` on the address, pins it to made-up readings. The alert settings are always on the page; where there is no `/api/alerts` behind them they stay empty and saving says so.
 
 ## Credits
 
