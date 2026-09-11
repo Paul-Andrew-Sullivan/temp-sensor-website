@@ -5,9 +5,9 @@ ECE:4880 Lab 1, fall 2026. The computer-side interface for a two-sensor thermome
 | Site | URL | What it is |
 |---|---|---|
 | Server site | https://thermo.paulandrewsullivan.com | Full page: 3D thermometer with a try-it slider, readings, virtual buttons, 300 s chart recorder. Alert settings are built but hidden for now. Backed by `backend/`. |
-| ESP32 page | https://thermo-esp32.paulandrewsullivan.com | The single lean file the board can serve by itself (no external assets, under 10 KB). Hosted here as a mirror against the same backend. |
+| ESP32 page | https://thermo-esp32.paulandrewsullivan.com | The single file the board can serve by itself: no external assets, no web fonts, nothing that needs a route off the board's own access point. Hosted here as a mirror against the same backend. |
 
-Both pages read "No data available" until a board posts to `/ingest`. See **The board** below.
+The server page reads "No data available" until a board posts to `/ingest`. The ESP32 page draws made-up readings until then. See **The board** below.
 
 ## Layout
 
@@ -36,7 +36,7 @@ No dependencies beyond Python 3.11+. `STATIC_DIR` makes the API serve a site fol
 ## The board
 
 - **Client mode** (server-hosted): post `{ "s1": 21.4, "s2": null, "b1": true, "b2": true }` to `https://thermo.paulandrewsullivan.com/ingest` with header `X-Probe-Token` twice a second. The reply carries the wanted button states. Details in `docs/api.md`.
-- **Standalone mode** (ESP32-hosted): serve `esp32-site/index.html` at `/` and implement `/api/state`, `/api/history`, `/api/button` as described in `docs/api.md`. The page hides its alert section when `/api/alerts` returns 404.
+- **Standalone mode** (ESP32-hosted): serve `esp32-site/index.html` at `/` and implement `/api/state`, `/api/history`, `/api/button` as described in `docs/api.md`. Whenever the box is not reporting, the page draws made-up readings so the graph can be shown without hardware, and the first real reading replaces them. Opening the file from disk, or `?sample` on the address, pins it to made-up readings. The alert settings are always on the page; where there is no `/api/alerts` behind them they stay empty and saving says so.
 
 Firmware is not in this repo yet.
 
