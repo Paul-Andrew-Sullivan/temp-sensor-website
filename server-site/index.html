@@ -13,34 +13,37 @@
 </head>
 <body>
 <main>
+<header class="site-header">
+<div>
 <h1>Two-sensor thermometer</h1>
 <p class="status" id="boxline">Waiting for the first reading from the box.</p>
-
-<div class="hero">
-  <div id="model" aria-label="A thermometer whose red column follows the selected sensor"></div>
-  <div>
-    <div class="readings">
-      <div class="reading"><div class="val" id="t1">—</div><div class="lbl">Sensor 1</div></div>
-      <div class="reading"><div class="val" id="t2">—</div><div class="lbl">Sensor 2</div></div>
-    </div>
-    <p class="units" style="margin-top:18px">Show in <span id="units"></span></p>
-    <p class="status" id="modelline"></p>
-    <div class="slider">
-      <label for="slider">Try it: drag to set the thermometer yourself</label>
-      <input id="slider" type="range" min="-10" max="63" step="0.1" value="22">
-      <p class="status" id="sliderline">The thermometer is following the live reading.</p>
-    </div>
-  </div>
 </div>
+<button id="theme-toggle" type="button" aria-pressed="false">Dark mode</button>
+</header>
 
-<h2>Display buttons on the box</h2>
-<p>Pressing these does the same as pressing the buttons on the box. A sensor whose button is off is not shown on the box's own screen, but is still measured and graphed here. The box picks the change up within half a second.</p>
-<button id="b1">Sensor 1 display: on</button>
-<button id="b2">Sensor 2 display: on</button>
+<section class="overview" aria-labelledby="readings-heading">
+  <div class="section-heading">
+    <h2 id="readings-heading">Live readings</h2>
+    <p class="units">Show in <span id="units"></span></p>
+  </div>
+    <div class="readings">
+      <div class="reading">
+        <div class="lbl">Sensor 1</div>
+        <div class="val" id="t1">—</div>
+        <button class="display-toggle" id="b1" type="button" role="switch" aria-checked="true" aria-label="Sensor 1 display on the box">Display on</button>
+      </div>
+      <div class="reading">
+        <div class="lbl">Sensor 2</div>
+        <div class="val" id="t2">—</div>
+        <button class="display-toggle" id="b2" type="button" role="switch" aria-checked="true" aria-label="Sensor 2 display on the box">Display on</button>
+      </div>
+    </div>
+</section>
 
-<h2>Last 300 seconds</h2>
-<canvas id="chart" width="1880" height="560"></canvas>
-<p class="status">The graph moves left once a second. Missing data is hatched. A reading beyond the graph's range is drawn as a red line pinned to the top or bottom edge, so a broken sensor never looks like a hot one.</p>
+<section class="panel" aria-labelledby="history-heading">
+<h2 id="history-heading">Last 300 seconds</h2>
+<div class="chart-scroll"><canvas id="chart" width="1880" height="840" role="img" aria-label="Temperature history for both sensors over the last 300 seconds"></canvas></div>
+</section>
 
 <section id="alerts" hidden>
 <h2>Email or text when it goes out of range</h2>
@@ -57,8 +60,30 @@
 </section>
 
 <footer>
-<p>The ESP32 in the box reads two DS18B20 probes on one-meter leads and posts to this server twice a second. The server keeps the last 300 seconds. A leaner copy of this page, the one the board can serve by itself, is at <a href="https://thermo-esp32.paulandrewsullivan.com">thermo-esp32.paulandrewsullivan.com</a>.</p>
-<p>ECE:4880 Principles of ECE/CSE Design, Lab 1, fall 2026. Paul Sullivan and team. Built September 2026. Thermometer model by <a href="https://sketchfab.com/3d-models/thermometer-39a8561572e341a49cdbaa257321dd3a">Armature Studios on Sketchfab</a>, CC BY 4.0. Source on <a href="https://github.com/Paul-Andrew-Sullivan/temp-sensor-website">GitHub</a>.</p>
+  <div class="footer-grid">
+    <section aria-labelledby="project-heading">
+      <h2 id="project-heading">About the project</h2>
+      <p>The ESP32 reads two DS18B20 probes on one-meter leads and sends readings twice a second. The server keeps the last 300 seconds.</p>
+    </section>
+    <section aria-labelledby="team-heading">
+      <h2 id="team-heading">Team members</h2>
+      <ul class="team-list">
+        <li>Paul Sullivan</li>
+        <li>Tahsan Ul Alam</li>
+        <li>Daniel Marshall</li>
+        <li>Sam Smith</li>
+      </ul>
+    </section>
+    <nav aria-labelledby="links-heading">
+      <h2 id="links-heading">Project links</h2>
+      <a href="https://thermo-esp32.paulandrewsullivan.com">ESP32 standalone page <span aria-hidden="true">&nearr;</span></a>
+      <a href="https://github.com/Paul-Andrew-Sullivan/temp-sensor-website">Source on GitHub <span aria-hidden="true">&nearr;</span></a>
+    </nav>
+  </div>
+  <div class="footer-meta">
+    <p>ECE:4880 Principles of ECE/CSE Design &middot; Lab 1 &middot; Fall 2026</p>
+    <p>Built September 2026</p>
+  </div>
 </footer>
 </main>
 <script type="module" src="./app.js"></script>

@@ -1,48 +1,44 @@
 import { makeChart } from "./chart.js";
-import { makeThermometer } from "./thermo3d.js";
 
 const $ = (id) => document.getElementById(id);
+
+let theme = "light";
+try { theme = localStorage.getItem("theme") === "dark" ? "dark" : "light"; } catch (e) { /* localStorage blocked */ }
+function applyTheme() {
+  document.documentElement.dataset.theme = theme;
+  $("theme-toggle").textContent = theme === "dark" ? "Light mode" : "Dark mode";
+  $("theme-toggle").setAttribute("aria-pressed", String(theme === "dark"));
+}
+applyTheme();
+$("theme-toggle").addEventListener("click", () => {
+  theme = theme === "dark" ? "light" : "dark";
+  try { localStorage.setItem("theme", theme); } catch (e) { /* localStorage blocked */ }
+  applyTheme();
+  chart.setUnit(unit);
+});
 
 let unit = "C";
 try { unit = localStorage.getItem("unit") || "C"; } catch (e) { /* localStorage blocked */ }
 let box = "off", plugged = [false, false], on = [true, true], cur = [null, null], lastT = 0;
-let shown = 0; // which sensor the model shows
-let dragged = false; // once the slider is touched, it drives the model until "follow live" is clicked
-const slider = $("slider");
 
 const chart = makeChart($("chart"), { unit });
-const thermo = makeThermometer($("model"), "./models/thermometer.glb");
 
 const f = (c) => (unit === "F" ? (c * 9) / 5 + 32 : c);
 const fmt = (c) => f(c).toFixed(1) + " °" + unit;
 
 function drawUnits() {
-  $("units").innerHTML = unit === "C"
-    ? '<b>°C</b> <a href="#" data-u="F">°F</a>'
-    : '<a href="#" data-u="C">°C</a> <b>°F</b>';
+  $("units").innerHTML = ["C", "F"].map((u) =>
+    `<button type="button" data-u="${u}" aria-label="${u === "C" ? "Celsius" : "Fahrenheit"}" aria-pressed="${unit === u}">${u}</button>`
+  ).join("");
 }
 $("units").addEventListener("click", (e) => {
   const u = e.target.getAttribute("data-u");
-  if (!u) return;
+  if (u !== "C" && u !== "F") return;
   e.preventDefault();
   unit = u;
   try { localStorage.setItem("unit", u); } catch (err) { /* localStorage blocked */ }
   drawUnits(); render(); chart.setUnit(unit);
 });
-
-function link(text, fn) {
-  const a = document.createElement("a");
-  a.href = "#";
-  a.textContent = text;
-  a.onclick = (e) => { e.preventDefault(); fn(); };
-  return a;
-}
-
-// The poll runs once a second, so the swap link is built here and only has
-// its text updated in render(), rather than being replaced on every tick.
-const modelText = document.createTextNode("");
-const swapLink = link("", () => { shown = 1 - shown; render(); });
-$("modelline").append(modelText, swapLink, ".");
 
 function render() {
   const bl = $("boxline");
@@ -59,30 +55,10 @@ function render() {
     else if (!plugged[i]) { el.textContent = "unplugged sensor"; el.className = "val msg bad"; }
     else { el.textContent = fmt(cur[i]); el.className = "val"; }
     const b = $("b" + (i + 1));
-    b.textContent = "Sensor " + (i + 1) + " display: " + (on[i] ? "on" : "off");
-    b.className = on[i] ? "" : "off";
+    b.textContent = "Display " + (on[i] ? "on" : "off");
+    b.setAttribute("aria-checked", String(on[i]));
   }
-  // the model: the slider once dragged, otherwise the selected live sensor
-  if (dragged) {
-    thermo.setTemp(parseFloat(slider.value));
-  } else if (box === "off" || !plugged[shown]) {
-    thermo.setMissing();
-  } else {
-    thermo.setTemp(cur[shown]);
-    slider.value = cur[shown];
-  }
-  modelText.nodeValue = "The thermometer shows sensor " + (shown + 1) + ". ";
-  swapLink.textContent = "Show sensor " + (2 - shown) + " instead";
 }
-
-slider.addEventListener("input", () => {
-  dragged = true;
-  const c = parseFloat(slider.value);
-  $("sliderline").innerHTML = "Set by the slider: " + c.toFixed(1) + " °C, " + ((c * 9) / 5 + 32).toFixed(1) + " °F. "
-    + '<a href="#" id="live">Follow the live reading again</a>.';
-  $("live").onclick = (e) => { e.preventDefault(); dragged = false; $("sliderline").textContent = "The thermometer is following the live reading."; render(); };
-  render();
-});
 
 function postJSON(url, body, method = "POST") {
   return fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json());
