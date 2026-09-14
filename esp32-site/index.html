@@ -5,134 +5,393 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Two-sensor thermometer</title>
 <link rel="icon" href="data:,">
+<meta name="description" content="Live readings, a 300-second chart recorder and out-of-range alerts for the ECE:4880 two-sensor thermometer, reported by an ESP32 in the box.">
+<!-- Self-contained: serve this file as text/html from flash or a filesystem. -->
 <style>
-body { max-width: 40em; margin: 2em auto; padding: 0 1em; }
-dd { margin: 0 0 1em; font-family: monospace; font-size: 2.5em; }
-dd.msg { font-family: inherit; font-size: 1em; }
-canvas { width: 100%; height: auto; }
-.off { color: #c00; }
+:root { --ink: #1a1a1a; --paper: #f6f5f2; --surface: #fff; --soft: #eeede9; --rule: #cfcac0; --faint: #6b675f; --red: #b3261e; --hatch: #e2ded6; }
+:root[data-theme="dark"] { color-scheme: dark; --ink: #f0ede7; --paper: #17191c; --surface: #22252a; --soft: #282c32; --rule: #494b50; --faint: #b8b5ae; --red: #ff8076; --hatch: #34373d; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 17px/1.5 Georgia, "Times New Roman", serif; }
+main { max-width: 1200px; margin: 0 auto; padding: 40px 22px 60px; }
+.site-header { display: flex; justify-content: space-between; align-items: start; gap: 24px; padding-bottom: 24px; border-bottom: 1px solid var(--rule); }
+.site-header > div { min-width: 0; }
+.site-header .status { margin: 12px 0 0; font-size: 14px; }
+#theme-toggle { flex-shrink: 0; margin: 0; background: var(--surface); color: var(--ink); border: 1px solid var(--rule); border-radius: 999px; font-size: 14px; padding: 10px 16px; }
+h1 { font-size: 36px; line-height: 1.15; margin: 0 0 6px; font-weight: 400; }
+h2 { font-size: 20px; margin: 48px 0 12px; font-weight: 400; border-top: 1px solid var(--rule); padding-top: 14px; }
+p { margin: 0 0 10px; max-width: 62ch; }
+.status { color: var(--faint); }
+.status.off { color: var(--red); }
+a { color: var(--ink); }
+.overview { margin: 28px 0; }
+.section-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.section-heading h2 { margin: 0; padding: 0; border: 0; }
+.section-heading .units { margin: 0; }
+.readings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.reading { display: flex; flex-direction: column; gap: 12px; padding: 22px 24px; background: var(--soft); border: 1px solid var(--rule); border-radius: 16px; }
+.reading .display-toggle { display: inline-flex; align-items: center; gap: 10px; align-self: flex-start; margin: auto 0 0; padding: 10px 0 0; background: transparent; color: var(--ink); font: 14px/1.5 system-ui, sans-serif; }
+.display-toggle::before { content: ""; width: 38px; height: 22px; border-radius: 999px; background: radial-gradient(circle at 11px 11px, var(--surface) 7px, transparent 8px), var(--faint); }
+.display-toggle[aria-checked="true"]::before { background: radial-gradient(circle at 27px 11px, var(--surface) 7px, transparent 8px), var(--ink); }
+.reading .val { font: 60px/1 "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; letter-spacing: -0.02em; white-space: nowrap; }
+.reading .val.msg { font: italic 24px/1.3 Georgia, serif; color: var(--faint); padding: 8px 0; white-space: normal; }
+.reading .val.msg.bad { color: var(--red); }
+.reading .lbl { margin: 0; color: var(--faint); font: 600 13px/1.4 system-ui, sans-serif; letter-spacing: 0.06em; text-transform: uppercase; }
+.units a, .units b { margin-right: 10px; }
+.units { display: flex; align-items: center; gap: 12px; font-size: 14px; }
+#units { display: inline-flex; padding: 3px; gap: 3px; background: var(--soft); border: 1px solid var(--rule); border-radius: 10px; }
+.units button { background: transparent; color: var(--faint); padding: 5px 14px; margin: 0; border-radius: 7px; }
+.units button[aria-pressed="true"] { background: var(--ink); color: var(--paper); font-weight: bold; }
+button { font: inherit; background: var(--ink); color: var(--paper); border: 0; border-radius: 9px; padding: 10px 16px; margin: 6px 12px 6px 0; cursor: pointer; }
+button:hover { filter: brightness(0.92); }
+:is(button, a, input, textarea):focus-visible { outline: 3px solid var(--red); outline-offset: 4px; }
+.panel { margin-top: 24px; padding: 26px; background: var(--surface); border: 1px solid var(--rule); border-radius: 18px; }
+.panel h2 { margin: 0 0 14px; padding: 0; border: 0; }
+.panel p { font-size: 15px; }
+button.off { background: var(--paper); color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.chart-scroll { overflow-x: auto; margin: 16px 0; }
+canvas#chart { display: block; width: 100%; min-width: 620px; height: auto; }
+label { display: block; margin: 10px 0 2px; color: var(--faint); }
+input, textarea { font: inherit; width: 100%; max-width: 520px; padding: 6px 8px; border: 1px solid var(--rule); border-radius: 0; background: var(--paper); color: var(--ink); }
+textarea { height: 64px; }
+select { font: inherit; border: 1px solid var(--rule); border-radius: 0; background: var(--paper); color: var(--ink); padding: 2px 6px; }
+.row { display: flex; gap: 24px; flex-wrap: wrap; }
+.row > div { flex: 1; min-width: 140px; max-width: 200px; }
+#saved { color: var(--faint); margin-left: 12px; }
+footer { margin-top: 48px; padding-top: 28px; border-top: 1px solid var(--rule); color: var(--faint); font-size: 14px; line-height: 1.7; }
+.footer-grid { display: grid; grid-template-columns: 1.5fr 1fr 1fr; gap: 40px; padding-bottom: 28px; }
+.footer-grid > * { min-width: 0; }
+footer h2 { margin: 0 0 14px; padding: 0; border: 0; color: var(--ink); font: 600 12px/1.5 system-ui, sans-serif; letter-spacing: 0.08em; text-transform: uppercase; }
+footer p { margin: 0; }
+.team-list { list-style: none; margin: 0; padding: 0; }
+.team-list li + li { margin-top: 4px; }
+footer nav a { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 5px 0; text-decoration-color: var(--rule); text-underline-offset: 4px; }
+footer nav a:hover { text-decoration-color: var(--ink); }
+.footer-meta { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px 24px; padding-top: 18px; border-top: 1px solid var(--rule); font: 12px/1.6 system-ui, sans-serif; }
+@media (max-width: 700px) { main { padding: 24px 18px 40px; }
+.site-header { gap: 14px; flex-wrap: wrap; }
+h1 { font-size: 30px; }
+.readings { grid-template-columns: 1fr; gap: 14px; }
+.section-heading { flex-wrap: wrap; }
+.reading .val { font-size: 46px; }
+.panel { padding: 18px; }
+.footer-grid { grid-template-columns: 1fr; gap: 24px; }
+footer nav { max-width: 280px; }
+}
 </style>
 </head>
 <body>
-
+<main>
+<header class="site-header">
+<div>
 <h1>Two-sensor thermometer</h1>
-<p id="boxline">Waiting for the first reading from the box.</p>
+<p class="status" id="boxline">Waiting for the first reading from the box.</p>
+</div>
+<button id="theme-toggle" type="button" aria-pressed="false">Dark mode</button>
+</header>
 
-<dl>
-<dt>Sensor 1</dt>
-<dd id="t1">&mdash;</dd>
-<dt>Sensor 2</dt>
-<dd id="t2">&mdash;</dd>
-</dl>
+<section class="overview" aria-labelledby="readings-heading">
+  <div class="section-heading">
+    <h2 id="readings-heading">Live readings</h2>
+    <p class="units">Show in <span id="units"></span></p>
+  </div>
+    <div class="readings">
+      <div class="reading">
+        <div class="lbl">Sensor 1</div>
+        <div class="val" id="t1">—</div>
+        <button class="display-toggle" id="b1" type="button" role="switch" aria-checked="true" aria-label="Sensor 1 display on the box">Display on</button>
+      </div>
+      <div class="reading">
+        <div class="lbl">Sensor 2</div>
+        <div class="val" id="t2">—</div>
+        <button class="display-toggle" id="b2" type="button" role="switch" aria-checked="true" aria-label="Sensor 2 display on the box">Display on</button>
+      </div>
+    </div>
+</section>
 
-<p>Show in <span id="units"></span></p>
-
-<h2>Display buttons on the box</h2>
-<p>Pressing these does the same as pressing the buttons on the box. A sensor whose button is off is not shown on the box's own screen, but is still measured and graphed here.</p>
-<p>
-<button id="b1">Sensor 1 display: on</button>
-<button id="b2">Sensor 2 display: on</button>
-</p>
-
-<h2>Last 300 seconds</h2>
-<canvas id="chart" width="1800" height="520"></canvas>
-<p>The graph moves left once a second. Missing data is hatched. A reading beyond the graph's range is drawn as a red line pinned to the top or bottom edge.</p>
+<section class="panel" aria-labelledby="history-heading">
+<h2 id="history-heading">Last 300 seconds</h2>
+<div class="chart-scroll"><canvas id="chart" width="1880" height="840" role="img" aria-label="Temperature history for both sensors over the last 300 seconds"></canvas></div>
+</section>
 
 <section id="alerts" hidden>
 <h2>Email or text when it goes out of range</h2>
-<p>The message goes out once when a sensor crosses a limit, and again only after it has come back inside the range. For a text, use your carrier's email-to-SMS address, for example 3195551234@txt.att.net.</p>
-<p>
-<label for="email">Send to</label>
-<input id="email" placeholder="name@example.com" autocomplete="email" size="32">
-</p>
-<p>
-<label for="max">Maximum, &deg;C</label>
-<input id="max" type="number" step="0.5">
-<label for="min">Minimum, &deg;C</label>
-<input id="min" type="number" step="0.5">
-</p>
-<p>
-<label for="maxMessage">Message when above the maximum</label><br>
-<textarea id="maxMessage" rows="2" cols="48"></textarea>
-</p>
-<p>
-<label for="minMessage">Message when below the minimum</label><br>
-<textarea id="minMessage" rows="2" cols="48"></textarea>
-</p>
-<p><a href="#" id="save">Save these settings</a> <span id="saved"></span></p>
-<p id="lastsent"></p>
+<p>The message goes out once when a sensor crosses a limit, and again only after it has come back inside the range by half a degree. For a text, use your carrier's email-to-SMS address, for example 3195551234@txt.att.net. Mail is sent by the server, so nobody needs to keep this page open.</p>
+<label for="email">Send to</label><input id="email" placeholder="name@example.com" autocomplete="email">
+<div class="row">
+  <div><label for="max">Maximum, °C</label><input id="max" type="number" step="0.5"></div>
+  <div><label for="min">Minimum, °C</label><input id="min" type="number" step="0.5"></div>
+</div>
+<label for="maxMessage">Message when above the maximum</label><textarea id="maxMessage"></textarea>
+<label for="minMessage">Message when below the minimum</label><textarea id="minMessage"></textarea>
+<p style="margin-top:12px"><a href="#" id="save">Save these settings</a><span id="saved"></span></p>
+<p class="status" id="lastsent"></p>
 </section>
 
-<hr>
-
 <footer>
-<p id="served">This page and its data are served by the ESP32 in the box. Two DS18B20 probes on one-meter leads feed it.</p>
-<p>ECE:4880 Principles of ECE/CSE Design, Lab 1, fall 2026. Paul Sullivan and team. Built September 2026.</p>
+  <div class="footer-grid">
+    <section aria-labelledby="project-heading">
+      <h2 id="project-heading">About the project</h2>
+      <p>The ESP32 reads two DS18B20 probes on one-meter leads. This standalone page shows live readings and the last 300 seconds from the device serving it.</p>
+    </section>
+    <section aria-labelledby="team-heading">
+      <h2 id="team-heading">Team members</h2>
+      <ul class="team-list">
+        <li>Paul Sullivan</li>
+        <li>Tahsan Ul Alam</li>
+        <li>Daniel Marshall</li>
+        <li>Sam Smith</li>
+      </ul>
+    </section>
+    <nav aria-labelledby="links-heading">
+      <h2 id="links-heading">Project links</h2>
+      <a href="https://thermo.paulandrewsullivan.com">Server page <span aria-hidden="true">&nearr;</span></a>
+      <a href="https://github.com/Paul-Andrew-Sullivan/temp-sensor-website">Source on GitHub <span aria-hidden="true">&nearr;</span></a>
+    </nav>
+  </div>
+  <div class="footer-meta">
+    <p>ECE:4880 Principles of ECE/CSE Design &middot; Lab 1 &middot; Fall 2026</p>
+    <p>Built September 2026</p>
+  </div>
 </footer>
-
+</main>
 <script>
-(function(){
-var N=300,YMIN=10,YMAX=50;
-var INK='#000',FAINT='#767676',RULE='#ccc',HATCH='#ddd',RED='#c00';
-var s=[new Array(N).fill(null),new Array(N).fill(null)];
-var unit=localStorage.getItem('unit')||'C';
-var box='off',plugged=[false,false],on=[true,true],lastT=0,cur=[null,null];
-var $=function(i){return document.getElementById(i)};
-function f(c){return unit==='F'?c*9/5+32:c}
-function fmt(c){var v=f(c);return v.toFixed(1)+' °'+unit}
-function drawUnits(){$('units').innerHTML=(unit==='C'?'<b>°C</b> <a href="#" data-u="F">°F</a>':'<a href="#" data-u="C">°C</a> <b>°F</b>')}
-$('units').addEventListener('click',function(e){var u=e.target.getAttribute('data-u');if(!u)return;e.preventDefault();unit=u;localStorage.setItem('unit',u);drawUnits();render();draw()});
-function render(){
-  var bl=$('boxline');
-  if(box==='off'){bl.textContent='No data available. The box is switched off or not reachable.';bl.className='off'}
-  else{bl.textContent='The box is on and reporting once a second.';bl.className=''}
-  for(var i=0;i<2;i++){
-    var el=$('t'+(i+1));
-    if(box==='off'){el.textContent='no data available';el.className='msg'}
-    else if(!plugged[i]){el.textContent='unplugged sensor';el.className='msg off'}
-    else{el.textContent=fmt(cur[i]);el.className=''}
-    $('b'+(i+1)).textContent='Sensor '+(i+1)+' display: '+(on[i]?'on':'off');
-  }
+(function () {
+"use strict";
+const N = 300;
+const YMIN = 10;
+const YMAX = 50;
+const INK = "#1a1a1a";
+const FAINT = "#6b675f";
+const HATCH = "#e2ded6";
+const RED = "#b3261e";
+function makeChart(canvas, opts = {}) {
+const cx = canvas.getContext("2d");
+let ink = INK, faint = FAINT, hatchColor = HATCH, red = RED;
+let unit = opts.unit || "C";
+let series = [new Array(N).fill(null), new Array(N).fill(null)];
+const f = (c) => (unit === "F" ? (c * 9) / 5 + 32 : c);
+function hatch(x, y, w, h) {
+cx.save();
+cx.beginPath();
+cx.rect(x, y, w, h);
+cx.clip();
+cx.strokeStyle = hatchColor;
+cx.lineWidth = 2;
+for (let d = -h; d < w; d += 12) {
+cx.beginPath();
+cx.moveTo(x + d, y + h);
+cx.lineTo(x + d + h, y);
+cx.stroke();
 }
-function press(i){fetch('/api/button',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sensor:i+1,on:!on[i]})}).then(function(r){return r.json()}).then(function(j){on=[j.b1,j.b2];render()})}
-$('b1').onclick=function(){press(0)};$('b2').onclick=function(){press(1)};
-function history(){fetch('/api/history').then(function(r){return r.json()}).then(function(j){s=[j.s1,j.s2];draw()})}
-function state(){fetch('/api/state').then(function(r){return r.json()}).then(function(j){
-  box=j.box;plugged=[j.s1.plugged,j.s2.plugged];on=[j.s1.on,j.s2.on];cur=[j.s1.temp,j.s2.temp];
-  var gap=lastT&&(j.t-lastT>2500);lastT=j.t;
-  for(var i=0;i<2;i++){s[i].push(cur[i]);if(s[i].length>N)s[i].shift()}
-  render();draw();if(gap)history();
-}).catch(function(){box='off';render();for(var i=0;i<2;i++){s[i].push(null);s[i].shift()}draw()})}
-var cv=$('chart'),cx=cv.getContext('2d');
-function draw(){
-  var W=cv.width,H=cv.height,L=110,R=30,T=30,B=70,pw=W-L-R,ph=H-T-B;
-  cx.clearRect(0,0,W,H);cx.font='24px serif';cx.fillStyle=FAINT;cx.strokeStyle=RULE;cx.lineWidth=2;
-  var lo=f(YMIN),hi=f(YMAX);
-  for(var k=0;k<=4;k++){var y=T+ph*k/4;cx.beginPath();cx.moveTo(L,y);cx.lineTo(W-R,y);cx.stroke();var v=hi-(hi-lo)*k/4;cx.textAlign='right';cx.fillText(v.toFixed(0)+'°'+unit,L-14,y+8)}
-  for(var sec=300;sec>=0;sec-=60){var x=L+pw*(1-sec/300);cx.beginPath();cx.moveTo(x,T);cx.lineTo(x,T+ph);cx.stroke();cx.textAlign='center';cx.fillText(sec,x,T+ph+34)}
-  cx.fillText('seconds ago',L+pw/2,H-10);
-  var colw=pw/N;
-  var m=null;for(var i=0;i<N;i++){var miss=s[0][i]==null||s[1][i]==null;if(miss&&m===null)m=i;if((!miss||i===N-1)&&m!==null){var a=L+colw*m,b=L+colw*(miss?i+1:i);hatch(a,T,b-a,ph);m=null}}
-  var cols=[INK,FAINT];
-  for(var si=0;si<2;si++){
-    cx.strokeStyle=cols[si];cx.lineWidth=si?2.5:3.5;cx.setLineDash(si?[8,6]:[]);cx.beginPath();var pen=false;
-    for(var j=0;j<N;j++){var v=s[si][j];if(v==null){pen=false;continue}
-      var x=L+colw*(j+.5);if(v>YMAX||v<YMIN){pen=false;offscale(x,colw,v>YMAX?T:T+ph);continue}
-      var y=T+ph*(1-(v-YMIN)/(YMAX-YMIN));if(pen)cx.lineTo(x,y);else cx.moveTo(x,y);pen=true}
-    cx.stroke();cx.setLineDash([]);
-  }
-  cx.fillStyle=INK;cx.textAlign='left';cx.fillText('— sensor 1',L,T-8);cx.fillStyle=FAINT;cx.fillText('- - sensor 2',L+150,T-8);
-  function hatch(x,y,w,h){cx.save();cx.beginPath();cx.rect(x,y,w,h);cx.clip();cx.strokeStyle=HATCH;cx.lineWidth=2;for(var d=-h;d<w;d+=12){cx.beginPath();cx.moveTo(x+d,y+h);cx.lineTo(x+d+h,y);cx.stroke()}cx.restore()}
-  function offscale(x,w,y){cx.save();cx.fillStyle=RED;cx.fillRect(x-w/2,y-3,w+1,6);cx.restore()}
+cx.restore();
 }
-function alerts(){fetch('/api/alerts').then(function(r){if(!r.ok)throw 0;return r.json()}).then(function(j){
-  $('alerts').hidden=false;$('email').value=j.email;$('max').value=j.max;$('min').value=j.min;$('maxMessage').value=j.maxMessage;$('minMessage').value=j.minMessage;
-  $('lastsent').textContent=j.lastSent?('Last message sent '+new Date(j.lastSent.t).toLocaleString()+' for sensor '+j.lastSent.sensor+(j.lastSent.ok?'.':', but delivery failed.')):'No message has been sent yet.';
-  $('served').textContent='This is the copy of the ESP32 page hosted on the server. The board would serve the same file from its own address.';
-}).catch(function(){})}
-$('save').onclick=function(e){e.preventDefault();var b={email:$('email').value,max:$('max').value,min:$('min').value,maxMessage:$('maxMessage').value,minMessage:$('minMessage').value};
-  fetch('/api/alerts',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json()}).then(function(j){$('saved').textContent=j.error?('Not saved: '+j.error):'Saved.';setTimeout(function(){$('saved').textContent=''},4000)})};
-drawUnits();render();draw();history();state();alerts();setInterval(state,1000);setInterval(history,30000);
+function offscale(x, w, y) {
+cx.save();
+cx.fillStyle = red;
+cx.fillRect(x - w / 2, y - 3, w + 1, 6);
+cx.restore();
+}
+function draw() {
+const colors = getComputedStyle(canvas);
+ink = colors.getPropertyValue("--ink").trim() || INK;
+faint = colors.getPropertyValue("--faint").trim() || FAINT;
+hatchColor = colors.getPropertyValue("--hatch").trim() || HATCH;
+red = colors.getPropertyValue("--red").trim() || RED;
+const W = canvas.width, H = canvas.height;
+const L = 150, R = 170, T = 70, B = 90;
+const pw = W - L - R, ph = H - T - B;
+cx.clearRect(0, 0, W, H);
+cx.font = "24px Georgia, serif";
+cx.fillStyle = faint;
+const axisColor = document.documentElement.dataset.theme === "dark" ? "#8ab4f8" : "#5686c4";
+cx.strokeStyle = axisColor;
+cx.lineWidth = 2;
+cx.setLineDash([8, 6]);
+const lo = f(YMIN), hi = f(YMAX);
+for (let k = 0; k <= 4; k++) {
+const y = T + (ph * k) / 4;
+cx.beginPath(); cx.moveTo(L, y); cx.lineTo(W - R, y); cx.stroke();
+const v = hi - ((hi - lo) * k) / 4;
+cx.textAlign = "left";
+cx.fillText(v.toFixed(0) + "°", W - R + 22, y + 8);
+}
+for (let sec = 300; sec >= 0; sec -= 100) {
+const x = L + pw * (1 - sec / 300);
+cx.beginPath(); cx.moveTo(x, T); cx.lineTo(x, T + ph); cx.stroke();
+cx.textAlign = "center";
+cx.fillText(sec, x, T + ph + 38);
+}
+cx.setLineDash([]);
+cx.beginPath();
+cx.moveTo(W - R + 100, T + ph); cx.lineTo(L - 35, T + ph);
+cx.lineTo(L - 20, T + ph - 10);
+cx.moveTo(L - 35, T + ph); cx.lineTo(L - 20, T + ph + 10);
+cx.moveTo(W - R, T + ph + 15); cx.lineTo(W - R, T - 35);
+cx.lineTo(W - R - 10, T - 20);
+cx.moveTo(W - R, T - 35); cx.lineTo(W - R + 10, T - 20);
+cx.stroke();
+cx.fillStyle = ink;
+cx.textAlign = "left";
+cx.fillText("Temp, °" + unit, W - R + 22, T - 28);
+cx.textAlign = "center";
+cx.fillText("Seconds ago", L + pw / 2, H - 12);
+const colw = pw / N;
+let m = null;
+for (let i = 0; i < N; i++) {
+const miss = series[0][i] == null || series[1][i] == null;
+if (miss && m === null) m = i;
+if ((!miss || i === N - 1) && m !== null) {
+const a = L + colw * m, b = L + colw * (miss ? i + 1 : i);
+hatch(a, T, b - a, ph);
+m = null;
+}
+}
+const lineColors = [ink, faint];
+for (let si = 0; si < 2; si++) {
+cx.strokeStyle = lineColors[si];
+cx.lineWidth = si ? 2.5 : 3.5;
+cx.setLineDash(si ? [8, 6] : []);
+cx.beginPath();
+let pen = false;
+for (let j = 0; j < N; j++) {
+const v = series[si][j];
+if (v == null) { pen = false; continue; }
+const x = L + colw * (j + 0.5);
+if (v > YMAX || v < YMIN) { pen = false; offscale(x, colw, v > YMAX ? T : T + ph); continue; }
+const y = T + ph * (1 - (v - YMIN) / (YMAX - YMIN));
+if (pen) cx.lineTo(x, y); else cx.moveTo(x, y);
+pen = true;
+}
+cx.stroke();
+cx.setLineDash([]);
+}
+cx.fillStyle = ink; cx.textAlign = "left"; cx.fillText("— sensor 1", L, T - 28);
+cx.fillStyle = faint; cx.fillText("- - sensor 2", L + 180, T - 28);
+}
+return {
+draw,
+setUnit(u) { unit = u; draw(); },
+setSeries(s1, s2) { series = [s1.slice(-N), s2.slice(-N)]; draw(); },
+push(v1, v2) {
+series[0].push(v1); series[1].push(v2);
+if (series[0].length > N) series[0].shift();
+if (series[1].length > N) series[1].shift();
+draw();
+},
+};
+}
+const $ = (id) => document.getElementById(id);
+let theme = "light";
+try { theme = localStorage.getItem("theme") === "dark" ? "dark" : "light"; } catch (e) { /* localStorage blocked */ }
+function applyTheme() {
+document.documentElement.dataset.theme = theme;
+$("theme-toggle").textContent = theme === "dark" ? "Light mode" : "Dark mode";
+$("theme-toggle").setAttribute("aria-pressed", String(theme === "dark"));
+}
+applyTheme();
+$("theme-toggle").addEventListener("click", () => {
+theme = theme === "dark" ? "light" : "dark";
+try { localStorage.setItem("theme", theme); } catch (e) { /* localStorage blocked */ }
+applyTheme();
+chart.setUnit(unit);
+});
+let unit = "C";
+try { unit = localStorage.getItem("unit") === "F" ? "F" : "C"; } catch (e) { /* localStorage blocked */ }
+let box = "off", plugged = [false, false], on = [true, true], cur = [null, null], lastT = 0;
+const chart = makeChart($("chart"), { unit });
+const f = (c) => (unit === "F" ? (c * 9) / 5 + 32 : c);
+const fmt = (c) => f(c).toFixed(1) + " °" + unit;
+function drawUnits() {
+$("units").innerHTML = ["C", "F"].map((u) =>
+`<button type="button" data-u="${u}" aria-label="${u === "C" ? "Celsius" : "Fahrenheit"}" aria-pressed="${unit === u}">${u}</button>`
+).join("");
+}
+$("units").addEventListener("click", (e) => {
+const u = e.target.getAttribute("data-u");
+if (u !== "C" && u !== "F") return;
+e.preventDefault();
+unit = u;
+try { localStorage.setItem("unit", u); } catch (err) { /* localStorage blocked */ }
+drawUnits(); render(); chart.setUnit(unit);
+});
+function render() {
+const bl = $("boxline");
+if (box === "off") {
+bl.textContent = "No data available. The box is switched off or not reachable.";
+bl.className = "status off";
+} else {
+bl.textContent = "The box is on and reporting once a second.";
+bl.className = "status";
+}
+for (let i = 0; i < 2; i++) {
+const el = $("t" + (i + 1));
+if (box === "off") { el.textContent = "no data available"; el.className = "val msg"; }
+else if (!plugged[i]) { el.textContent = "unplugged sensor"; el.className = "val msg bad"; }
+else { el.textContent = fmt(cur[i]); el.className = "val"; }
+const b = $("b" + (i + 1));
+b.textContent = "Display " + (on[i] ? "on" : "off");
+b.setAttribute("aria-checked", String(on[i]));
+}
+}
+async function request(url, options = {}) {
+const controller = new AbortController();
+const timer = setTimeout(() => controller.abort(), 5000);
+try {
+const r = await fetch(url, { ...options, cache: "no-store", signal: controller.signal });
+if (!r.ok) throw new Error("HTTP " + r.status);
+return await r.json();
+} finally { clearTimeout(timer); }
+}
+function postJSON(url, body, method = "POST") {
+return request(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+}
+async function press(i) {
+const button = $("b" + (i + 1));
+button.disabled = true;
+try { const j = await postJSON("/api/button", { sensor: i + 1, on: !on[i] }); on = [j.b1, j.b2]; render(); }
+catch (e) { $("boxline").textContent = "Could not update the display. Please try again."; $("boxline").className = "status off"; }
+finally { button.disabled = false; }
+}
+$("b1").onclick = () => press(0);
+$("b2").onclick = () => press(1);
+let historyPending = false;
+async function history() {
+if (historyPending) return;
+historyPending = true;
+try { const j = await request("/api/history"); chart.setSeries(j.s1, j.s2); }
+catch (e) { /* Keep the locally collected history when the board is unreachable. */ }
+finally { historyPending = false; }
+}
+function state() {
+request("/api/state").then((j) => {
+box = j.box; plugged = [j.s1.plugged, j.s2.plugged]; on = [j.s1.on, j.s2.on]; cur = [j.s1.temp, j.s2.temp];
+const gap = lastT && j.t - lastT > 2500;
+lastT = j.t;
+chart.push(cur[0], cur[1]);
+render();
+if (gap) history();
+}).catch(() => { box = "off"; chart.push(null, null); render(); }).finally(() => setTimeout(state, 1000));
+}
+function alerts() {
+request("/api/alerts").then((j) => {
+$("alerts").hidden = false;
+$("email").value = j.email; $("max").value = j.max; $("min").value = j.min;
+$("maxMessage").value = j.maxMessage; $("minMessage").value = j.minMessage;
+$("lastsent").textContent = j.lastSent
+? "Last message sent " + new Date(j.lastSent.t).toLocaleString() + " for sensor " + j.lastSent.sensor + (j.lastSent.ok ? "." : ", but delivery failed.")
+: "No message has been sent yet.";
+}).catch(() => { /* Optional server feature; standalone firmware can return 404. */ });
+}
+$("save").onclick = (e) => {
+e.preventDefault();
+const b = { email: $("email").value, max: $("max").value, min: $("min").value, maxMessage: $("maxMessage").value, minMessage: $("minMessage").value };
+postJSON("/api/alerts", b, "PUT").then((j) => {
+$("saved").textContent = j.error ? "Not saved: " + j.error : "Saved.";
+setTimeout(() => { $("saved").textContent = ""; }, 4000);
+}).catch(() => { $("saved").textContent = "Not saved. Please try again."; });
+};
+drawUnits(); render(); history(); state(); alerts();
+setInterval(history, 30000);
 })();
 </script>
 </body>

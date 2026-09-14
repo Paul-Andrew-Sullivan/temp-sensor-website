@@ -5,7 +5,7 @@ ECE:4880 Lab 1, fall 2026. The computer-side interface for a two-sensor thermome
 | Site | URL | What it is |
 |---|---|---|
 | Server site | https://thermo.paulandrewsullivan.com | Full page: 3D thermometer with a try-it slider, readings, virtual buttons, 300 s chart recorder. Alert settings are built but hidden for now. Backed by `backend/`. |
-| ESP32 page | https://thermo-esp32.paulandrewsullivan.com | The single lean file the board can serve by itself (no external assets, under 10 KB). Hosted here as a mirror against the same backend. |
+| ESP32 page | https://thermo-esp32.paulandrewsullivan.com | The single lean file the board can serve by itself (no external assets, under 20 KB). Hosted here as a mirror against the same backend. |
 
 Both pages read "No data available" until a board posts to `/ingest`. See **The board** below.
 
@@ -37,6 +37,8 @@ No dependencies beyond Python 3.11+. `STATIC_DIR` makes the API serve a site fol
 
 - **Client mode** (server-hosted): post `{ "s1": 21.4, "s2": null, "b1": true, "b2": true }` to `https://thermo.paulandrewsullivan.com/ingest` with header `X-Probe-Token` twice a second. The reply carries the wanted button states. Details in `docs/api.md`.
 - **Standalone mode** (ESP32-hosted): serve `esp32-site/index.html` at `/` and implement `/api/state`, `/api/history`, `/api/button` as described in `docs/api.md`. The page hides its alert section when `/api/alerts` returns 404.
+
+The standalone HTML includes its styles, chart, and scripts; it needs no CDN, web fonts, or JavaScript libraries. Serve it as `text/html; charset=utf-8` from flash (for example, PROGMEM) or a filesystem such as LittleFS, rather than assembling the page in RAM. Rendering runs in the visitor's browser. The board must still implement the API routes above.
 
 Firmware is not in this repo yet.
 
