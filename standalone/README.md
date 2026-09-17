@@ -4,6 +4,10 @@ A frozen copy of the version where the box ran the whole system on its own: it
 served the web page from its own flash, kept the 300 second history in its own
 RAM, and sent the alert mail itself. Nothing here needs the server.
 
+It does still need the hotspot. Requirement 7 sends mail, mail goes out over the
+internet, and the box has no other way to reach it. What this version avoids is
+the server, not the network.
+
 Kept as of commit `595edef`, also tagged `standalone-esp32`.
 
 ## Why it was set aside
@@ -14,8 +18,9 @@ the box being switched on. A page served by the box cannot do either, because
 the thing that would serve it is the thing that is off. The main build therefore
 reports to the server and the page is served from there.
 
-This copy is still the better answer if the box has to work with no server and
-no internet, so it is worth keeping.
+It is worth keeping anyway. If the server, the tunnel, or the domain is down on
+demo day, this version still shows readings and a graph to anyone who joins the
+box's own network, which the main build cannot do.
 
 ## What is here
 
