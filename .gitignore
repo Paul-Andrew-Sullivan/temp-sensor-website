@@ -4,3 +4,4 @@ __pycache__/
 data/
 .env
 firmware/thermo_box/secrets.h
+standalone/thermo_box/secrets.h
