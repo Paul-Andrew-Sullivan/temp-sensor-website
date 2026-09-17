@@ -8,12 +8,12 @@ export const YMAX = 50;
 
 const INK = "#1a1a1a";
 const FAINT = "#6b675f";
-const RULE = "#cfcac0";
 const HATCH = "#e2ded6";
 const RED = "#b3261e";
 
 export function makeChart(canvas, opts = {}) {
   const cx = canvas.getContext("2d");
+  let ink = INK, faint = FAINT, hatchColor = HATCH, red = RED;
   let unit = opts.unit || "C";
   let series = [new Array(N).fill(null), new Array(N).fill(null)];
 
@@ -24,7 +24,7 @@ export function makeChart(canvas, opts = {}) {
     cx.beginPath();
     cx.rect(x, y, w, h);
     cx.clip();
-    cx.strokeStyle = HATCH;
+    cx.strokeStyle = hatchColor;
     cx.lineWidth = 2;
     for (let d = -h; d < w; d += 12) {
       cx.beginPath();
@@ -37,36 +37,57 @@ export function makeChart(canvas, opts = {}) {
 
   function offscale(x, w, y) {
     cx.save();
-    cx.fillStyle = RED;
+    cx.fillStyle = red;
     cx.fillRect(x - w / 2, y - 3, w + 1, 6);
     cx.restore();
   }
 
   function draw() {
+    const colors = getComputedStyle(canvas);
+    ink = colors.getPropertyValue("--ink").trim() || INK;
+    faint = colors.getPropertyValue("--faint").trim() || FAINT;
+    hatchColor = colors.getPropertyValue("--hatch").trim() || HATCH;
+    red = colors.getPropertyValue("--red").trim() || RED;
     const W = canvas.width, H = canvas.height;
-    const L = 110, R = 30, T = 30, B = 70;
+    const L = 150, R = 170, T = 70, B = 90;
     const pw = W - L - R, ph = H - T - B;
     cx.clearRect(0, 0, W, H);
     cx.font = "24px Literata, Georgia, serif";
-    cx.fillStyle = FAINT;
-    cx.strokeStyle = RULE;
+    cx.fillStyle = faint;
+    const axisColor = document.documentElement.dataset.theme === "dark" ? "#8ab4f8" : "#5686c4";
+    cx.strokeStyle = axisColor;
     cx.lineWidth = 2;
+    cx.setLineDash([8, 6]);
 
     const lo = f(YMIN), hi = f(YMAX);
     for (let k = 0; k <= 4; k++) {
       const y = T + (ph * k) / 4;
       cx.beginPath(); cx.moveTo(L, y); cx.lineTo(W - R, y); cx.stroke();
       const v = hi - ((hi - lo) * k) / 4;
-      cx.textAlign = "right";
-      cx.fillText(v.toFixed(0) + "°" + unit, L - 14, y + 8);
+      cx.textAlign = "left";
+      cx.fillText(v.toFixed(0) + "°", W - R + 22, y + 8);
     }
-    for (let sec = 300; sec >= 0; sec -= 60) {
+    for (let sec = 300; sec >= 0; sec -= 100) {
       const x = L + pw * (1 - sec / 300);
       cx.beginPath(); cx.moveTo(x, T); cx.lineTo(x, T + ph); cx.stroke();
       cx.textAlign = "center";
-      cx.fillText(sec, x, T + ph + 34);
+      cx.fillText(sec, x, T + ph + 38);
     }
-    cx.fillText("seconds ago", L + pw / 2, H - 10);
+    cx.setLineDash([]);
+    // Chart-recorder axes: present time at the right, history to the left.
+    cx.beginPath();
+    cx.moveTo(W - R + 100, T + ph); cx.lineTo(L - 35, T + ph);
+    cx.lineTo(L - 20, T + ph - 10);
+    cx.moveTo(L - 35, T + ph); cx.lineTo(L - 20, T + ph + 10);
+    cx.moveTo(W - R, T + ph + 15); cx.lineTo(W - R, T - 35);
+    cx.lineTo(W - R - 10, T - 20);
+    cx.moveTo(W - R, T - 35); cx.lineTo(W - R + 10, T - 20);
+    cx.stroke();
+    cx.fillStyle = ink;
+    cx.textAlign = "left";
+    cx.fillText("Temp, °" + unit, W - R + 22, T - 28);
+    cx.textAlign = "center";
+    cx.fillText("Seconds ago", L + pw / 2, H - 12);
 
     const colw = pw / N;
     // Hatch runs wherever either sensor is missing (box off, or unplugged).
@@ -81,7 +102,7 @@ export function makeChart(canvas, opts = {}) {
       }
     }
 
-    const lineColors = [INK, FAINT];
+    const lineColors = [ink, faint];
     for (let si = 0; si < 2; si++) {
       cx.strokeStyle = lineColors[si];
       cx.lineWidth = si ? 2.5 : 3.5;
@@ -100,8 +121,8 @@ export function makeChart(canvas, opts = {}) {
       cx.stroke();
       cx.setLineDash([]);
     }
-    cx.fillStyle = INK; cx.textAlign = "left"; cx.fillText("— sensor 1", L, T - 8);
-    cx.fillStyle = FAINT; cx.fillText("- - sensor 2", L + 150, T - 8);
+    cx.fillStyle = ink; cx.textAlign = "left"; cx.fillText("— sensor 1", L, T - 28);
+    cx.fillStyle = faint; cx.fillText("- - sensor 2", L + 180, T - 28);
   }
 
   return {

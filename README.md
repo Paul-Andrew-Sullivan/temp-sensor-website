@@ -5,9 +5,9 @@ ECE:4880 Lab 1, fall 2026. The computer-side interface for a two-sensor thermome
 | Site | URL | What it is |
 |---|---|---|
 | Server site | https://thermo.paulandrewsullivan.com | Full page: 3D thermometer with a try-it slider, readings, virtual buttons, 300 s chart recorder. Alert settings are built but hidden for now. Backed by `backend/`. |
-| ESP32 page | https://thermo-esp32.paulandrewsullivan.com | The single file the board can serve by itself: no external assets, no web fonts, nothing that needs a route off the board's own access point. Hosted here as a mirror against the same backend. |
+| ESP32 page | https://thermo-esp32.paulandrewsullivan.com | The single lean file the board can serve by itself (no external assets, under 20 KB). Hosted here as a mirror against the same backend. |
 
-The server page reads "No data available" until a board posts to `/ingest`. The ESP32 page draws made-up readings until then. See **The board** below.
+Both pages read "No data available" until a board reports. See **The board** below.
 
 ## Layout
 
@@ -43,7 +43,7 @@ No dependencies beyond Python 3.11+. `STATIC_DIR` makes the API serve a site fol
   { printf '// The page the board serves at "/". This is esp32-site/index.html from the\n// repo, stored in flash as one raw string. Keep the two files identical.\nconst char PAGE[] PROGMEM = R"HTML(\n'; cat esp32-site/index.html; printf ')HTML";\n'; } > firmware/thermo_box/page.h
   ```
 
-  The API it serves is the one in `docs/api.md`. Whenever the box is not reporting, the page draws made-up readings so the graph can be shown without hardware, and the first real reading replaces them. Opening the file from disk, or `?sample` on the address, pins it to made-up readings. The alert settings are always on the page; where there is no `/api/alerts` behind them they stay empty and saving says so.
+  The API it serves is the one in `docs/api.md`. Everything on the page comes from the probes; there is no made-up data. The alert settings are always on the page; where there is no `/api/alerts` behind them they stay empty and saving says so.
 
 ## Credits
 
