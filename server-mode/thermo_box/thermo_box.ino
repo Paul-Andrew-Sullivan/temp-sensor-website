@@ -14,19 +14,18 @@
     - stores them in a 300 second history for the graph on the web page,
     - checks them against the alert limits and emails when one is crossed.
 
-  Wi-Fi: the board joins the network named in secrets.h, a phone hotspot,
-  and does not run one of its own. The page is at http://thermo-box.local,
-  or the address printed on the LCD and the serial monitor when it joins.
-  Nothing reaches the box until that network is up: no page, no mail, and
-  no clock.
+  The website lives on the server, not here. The box joins the hotspot named
+  in secrets.h and posts its readings to INGEST_URL twice a second, and the
+  reply carries the button states the web page wants. Requirement 5a.ii asks
+  the computer to read "no data available" while the box is switched off, and
+  requirement 6 asks for the readings back within ten seconds of switching it
+  on; a page served by the box could do neither, because the thing serving it
+  is the thing that is off. The server is up either way, so it can.
 
-  The graph survives a power cut. Every 30 seconds the last 300 readings go
-  to a file in flash, stamped with the wall clock of the newest one. On the
-  next boot, once the time server has answered, every saved reading is placed
-  by its own age and anything older than 300 seconds is dropped. The seconds
-  the box was off hold no readings, so the graph shows the break rather than
-  drawing a line across it. The time comes from the network, which is why the
-  box can measure how long it was off without a battery.
+  The box keeps its own 300 second history for the mail and the LCD, but the
+  graph on the computer is drawn from the server's copy, which survives the
+  box being switched off. The seconds the box was away stay empty there, which
+  is what requirement 5c.v asks for.
 
   Alerts: the page's "Email or text when it goes out of range" form is
   stored on the board (it survives power cycles) and read back with GET
@@ -45,6 +44,7 @@
 
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+#include <HTTPClient.h>
 #include <WebServer.h>
 #include <ESPmDNS.h>
 #include <Preferences.h>
@@ -64,9 +64,13 @@ const int ONEWIRE_PIN = 32;
 const int BUTTON_PIN[2] = {34, 35};   // input-only pins, pull-ups are on the board
 LiquidCrystal lcd(25, 26, 18, 19, 23, 27);   // RS, E, D4, D5, D6, D7
 
-const char *AP_NAME = "thermo-box";
-const char *AP_PASSWORD = "twoprobes";   // WPA2 wants at least 8 characters
 const char *HOSTNAME = "thermo-box";     // http://thermo-box.local on the joined network
+
+// Requirement 5b gives a press made on the web page under a second to reach the
+// box, so the box talks to the server twice a second. After a failed post it
+// waits longer, so an unreachable server cannot stall the sampling loop.
+const unsigned long POST_EVERY_MS = 500;
+const unsigned long POST_BACKOFF_MS = 5000;
 
 OneWire bus(ONEWIRE_PIN);
 DallasTemperature probes(&bus);
@@ -96,6 +100,10 @@ unsigned long buttonChangedMs[2] = {0, 0};
 unsigned long lcdHoldUntil = 0;    // readings stay off the LCD until this time
 bool wifiUp = false;               // joined WIFI_SSID and holding an address
 bool mdnsStarted = false;
+
+unsigned long nextPostMs = 0;      // when the next report to the server is due
+WiFiClientSecure postClient;       // kept apart from the one the mail uses
+HTTPClient http;                   // holds the connection open between posts
 
 // ---- alert settings and state ---------------------------------------------
 
@@ -141,23 +149,18 @@ void setup() {
   scanBus();
   probes.requestTemperatures();
 
+  postClient.setInsecure();   // no CA bundle on the board; the token is the check
   WiFi.setHostname(HOSTNAME);
-  WiFi.mode(WIFI_AP_STA);
-  WiFi.softAP(AP_NAME, AP_PASSWORD);
+  WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);   // returns at once; watchWifi() sees it join
-  String ip = WiFi.softAPIP().toString();
   Serial.println();
-  Serial.print("Wi-Fi network: ");
-  Serial.println(AP_NAME);
-  Serial.print("Page: http://");
-  Serial.println(ip);
   Serial.print("Joining ");
-  Serial.print(WIFI_SSID);
-  Serial.println(" for mail");
-  lcdLine(0, String("wifi ") + AP_NAME);
-  lcdLine(1, ip);
-  delay(3000);   // long enough to read the address off the screen
+  Serial.println(WIFI_SSID);
+  lcdLine(0, "Thermo box");
+  lcdLine(1, String("joining ") + WIFI_SSID);
+  // No delay here on purpose. Requirement 6 gives the box ten seconds from
+  // being switched on to data on the screen, and a pause spends them.
 
   server.on("/", sendPage);
   server.on("/api/state", sendState);
@@ -175,6 +178,7 @@ void loop() {
   server.handleClient();
   pollButtons();
   watchWifi();
+  reportToServer();
 
   if (millis() - lastSampleMs >= 1000) {
     lastSampleMs = millis();
@@ -292,6 +296,56 @@ void pollButtons() {
       updateLcd();        // so a press clears whatever notice is holding the screen
     }
   }
+}
+
+// ---- reporting to the server -----------------------------------------------
+
+// Sends the two readings and the two button states, and takes back the button
+// states the web page wants. When they differ the box obeys the page, which is
+// how requirement 5b lets the computer press a button that is not in the room.
+//
+// The post blocks the loop while it runs, so the timeout is short and a failure
+// backs off. Keeping the connection open matters more than it looks: a TLS
+// handshake costs this chip a second or two, far more than the gap between
+// posts, so setReuse holds one connection open across them.
+void reportToServer() {
+  if (!wifiUp || millis() < nextPostMs) return;
+
+  String body = "{\"s1\":" + numberOrNull(tempC[0]) +
+                ",\"s2\":" + numberOrNull(tempC[1]) +
+                ",\"b1\":" + trueOrFalse(shown[0]) +
+                ",\"b2\":" + trueOrFalse(shown[1]) + "}";
+
+  http.setReuse(true);
+  http.setConnectTimeout(2000);
+  http.setTimeout(2000);
+  if (!http.begin(postClient, INGEST_URL)) {
+    nextPostMs = millis() + POST_BACKOFF_MS;
+    return;
+  }
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("X-Probe-Token", PROBE_TOKEN);
+
+  int code = http.POST(body);
+  if (code == 200) {
+    String reply = http.getString();
+    bool want[2] = { reply.indexOf("\"b1\":true") >= 0, reply.indexOf("\"b2\":true") >= 0 };
+    for (int i = 0; i < 2; i++) {
+      if (want[i] == shown[i]) continue;
+      shown[i] = want[i];        // the page pressed it, so the screen follows
+      lcdHoldUntil = 0;
+      updateLcd();
+    }
+    nextPostMs = millis() + POST_EVERY_MS;
+  } else {
+    if (code == 401) Serial.println("Server refused the report: check PROBE_TOKEN");
+    else {
+      Serial.print("Report failed: ");
+      Serial.println(code);
+    }
+    nextPostMs = millis() + POST_BACKOFF_MS;
+  }
+  http.end();
 }
 
 // ---- the joined network ----------------------------------------------------

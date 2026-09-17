@@ -3,5 +3,5 @@ __pycache__/
 *.pyc
 data/
 .env
-firmware/thermo_box/secrets.h
-standalone/thermo_box/secrets.h
+# Any sketch folder, wherever it moves to. The repo is public.
+secrets.h

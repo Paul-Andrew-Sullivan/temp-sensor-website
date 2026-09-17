@@ -11,3 +11,8 @@
 // create one. That 16-character code goes here, not the account password.
 #define MAIL_ADDRESS      "thermobox.example@gmail.com"
 #define MAIL_APP_PASSWORD "abcd efgh ijkl mnop"
+
+// Where the box reports to, and the token the server checks. PROBE_TOKEN is
+// the line of the same name in the server's .env.
+#define INGEST_URL  "https://thermobox.paulandrewsullivan.com/ingest"
+#define PROBE_TOKEN "the-probe-token-from-the-server-env"
