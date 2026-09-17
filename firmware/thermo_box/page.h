@@ -331,9 +331,10 @@ for (let i = 0; i < 2; i++) {
 const el = $("t" + (i + 1));
 // Same order the LCD uses, so the two screens never disagree: a sensor whose
 // display is off reads "turned off" even when its probe is also unplugged.
+// The wording of the last two is set by the lab requirements, 5a.i and 5a.ii.
 if (box === "off") { el.textContent = "no data available"; el.className = "val msg"; }
 else if (!on[i]) { el.textContent = "turned off"; el.className = "val msg"; }
-else if (!plugged[i]) { el.textContent = "unplugged"; el.className = "val msg bad"; }
+else if (!plugged[i]) { el.textContent = "unplugged sensor"; el.className = "val msg bad"; }
 else { el.textContent = fmt(cur[i]); el.className = "val"; }
 const b = $("b" + (i + 1));
 b.textContent = "Display " + (on[i] ? "on" : "off");

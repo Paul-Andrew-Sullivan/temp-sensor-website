@@ -14,12 +14,19 @@
     - stores them in a 300 second history for the graph on the web page,
     - checks them against the alert limits and emails when one is crossed.
 
-  Wi-Fi works two ways at once. The board runs its own network so the demo
-  never depends on anyone else's Wi-Fi: join "thermo-box" (password below)
-  and open http://192.168.4.1. It also joins the network named in secrets.h
-  (a phone hotspot is fine) so it can reach Gmail. On that network the page
-  is at http://thermo-box.local, or the address printed on the LCD and the
-  serial monitor when it joins. Mail only works while that network is up.
+  Wi-Fi: the board joins the network named in secrets.h, a phone hotspot,
+  and does not run one of its own. The page is at http://thermo-box.local,
+  or the address printed on the LCD and the serial monitor when it joins.
+  Nothing reaches the box until that network is up: no page, no mail, and
+  no clock.
+
+  The graph survives a power cut. Every 30 seconds the last 300 readings go
+  to a file in flash, stamped with the wall clock of the newest one. On the
+  next boot, once the time server has answered, every saved reading is placed
+  by its own age and anything older than 300 seconds is dropped. The seconds
+  the box was off hold no readings, so the graph shows the break rather than
+  drawing a line across it. The time comes from the network, which is why the
+  box can measure how long it was off without a battery.
 
   Alerts: the page's "Email or text when it goes out of range" form is
   stored on the board (it survives power cycles) and read back with GET
@@ -242,9 +249,9 @@ void recordSample() {
 void updateLcd() {
   if (millis() < lcdHoldUntil) return;   // a notice is on the screen
   for (int i = 0; i < 2; i++) {
-    String line = "S" + String(i + 1) + "  ";
-    if (!shown[i]) line += "turned off";
-    else if (isnan(tempC[i])) line += "unplugged";
+    String line = "Sensor " + String(i + 1) + " ";
+    if (!shown[i]) line += "off";                       // the words requirement 4 asks for
+    else if (isnan(tempC[i])) line += "error";          // requirement 4d, the probe is silent
     else line += String(tempC[i], 1) + (char)223 + "C";   // 223 is the degree sign
     lcdLine(i, line);
   }
@@ -281,7 +288,8 @@ void pollButtons() {
     buttonLevel[i] = level;
     if (level == LOW) {
       shown[i] = !shown[i];
-      updateLcd();
+      lcdHoldUntil = 0;   // requirement 4a wants the answer on screen inside 20 ms,
+      updateLcd();        // so a press clears whatever notice is holding the screen
     }
   }
 }
