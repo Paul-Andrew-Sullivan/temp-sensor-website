@@ -115,7 +115,7 @@ footer nav { max-width: 280px; }
 
 <section id="alerts" hidden>
 <h2>Email or text when it goes out of range</h2>
-<p>The message goes out once when a sensor crosses a limit, and again only after it has come back inside the range by half a degree. For a text, use your carrier's email-to-SMS address, for example 3195551234@txt.att.net. Mail is sent by the server, so nobody needs to keep this page open.</p>
+<p>The message goes out once when a sensor crosses a limit, and again only after it has come back inside the range by half a degree. For a text, use your carrier's email-to-SMS address, for example 3195551234@txt.att.net. The box sends the mail itself, so nobody needs to keep this page open.</p>
 <label for="email">Send to</label><input id="email" placeholder="name@example.com" autocomplete="email">
 <div class="row">
   <div><label for="max">Maximum, °C</label><input id="max" type="number" step="0.5"></div>
@@ -298,6 +298,7 @@ chart.setUnit(unit);
 let unit = "C";
 try { unit = localStorage.getItem("unit") === "F" ? "F" : "C"; } catch (e) { /* localStorage blocked */ }
 let box = "off", plugged = [false, false], on = [true, true], cur = [null, null], lastT = 0;
+let pressSeq = 0;   // bumped on every toggle, so a reply sent before it cannot undo it
 const chart = makeChart($("chart"), { unit });
 const f = (c) => (unit === "F" ? (c * 9) / 5 + 32 : c);
 const fmt = (c) => f(c).toFixed(1) + " °" + unit;
@@ -325,8 +326,11 @@ bl.className = "status";
 }
 for (let i = 0; i < 2; i++) {
 const el = $("t" + (i + 1));
+// Same order the LCD uses, so the two screens never disagree: a sensor whose
+// display is off reads "turned off" even when its probe is also unplugged.
 if (box === "off") { el.textContent = "no data available"; el.className = "val msg"; }
-else if (!plugged[i]) { el.textContent = "unplugged sensor"; el.className = "val msg bad"; }
+else if (!on[i]) { el.textContent = "turned off"; el.className = "val msg"; }
+else if (!plugged[i]) { el.textContent = "unplugged"; el.className = "val msg bad"; }
 else { el.textContent = fmt(cur[i]); el.className = "val"; }
 const b = $("b" + (i + 1));
 b.textContent = "Display " + (on[i] ? "on" : "off");
@@ -348,6 +352,7 @@ return request(url, { method, headers: { "Content-Type": "application/json" }, b
 async function press(i) {
 const button = $("b" + (i + 1));
 button.disabled = true;
+pressSeq++;
 try { const j = await postJSON("/api/button", { sensor: i + 1, on: !on[i] }); on = [j.b1, j.b2]; render(); }
 catch (e) { $("boxline").textContent = "Could not update the display. Please try again."; $("boxline").className = "status off"; }
 finally { button.disabled = false; }
@@ -363,8 +368,12 @@ catch (e) { /* Keep the locally collected history when the board is unreachable.
 finally { historyPending = false; }
 }
 function state() {
+const seq = pressSeq;
 request("/api/state").then((j) => {
-box = j.box; plugged = [j.s1.plugged, j.s2.plugged]; on = [j.s1.on, j.s2.on]; cur = [j.s1.temp, j.s2.temp];
+box = j.box; plugged = [j.s1.plugged, j.s2.plugged]; cur = [j.s1.temp, j.s2.temp];
+// The box owns the button states, including presses made on the box itself.
+// The one reply to ignore is one that left before a toggle sent from here.
+if (seq === pressSeq) on = [j.s1.on, j.s2.on];
 const gap = lastT && j.t - lastT > 2500;
 lastT = j.t;
 chart.push(cur[0], cur[1]);

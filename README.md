@@ -43,7 +43,9 @@ No dependencies beyond Python 3.11+. `STATIC_DIR` makes the API serve a site fol
   { printf '// The page the board serves at "/". This is esp32-site/index.html from the\n// repo, stored in flash as one raw string. Keep the two files identical.\nconst char PAGE[] PROGMEM = R"HTML(\n'; cat esp32-site/index.html; printf ')HTML";\n'; } > firmware/thermo_box/page.h
   ```
 
-  The API it serves is the one in `docs/api.md`. Everything on the page comes from the probes; there is no made-up data. The alert settings are always on the page; where there is no `/api/alerts` behind them they stay empty and saving says so.
+  The API it serves is the one in `docs/api.md`. Everything on the page comes from the probes; there is no made-up data.
+  The display buttons work from either end: a press on the box and the switch on the page set the same flag, so the page
+  reads `turned off` or `unplugged` exactly where the LCD does. The alert settings are always on the page; where there is no `/api/alerts` behind them they stay empty and saving says so.
 
 ## Credits
 
