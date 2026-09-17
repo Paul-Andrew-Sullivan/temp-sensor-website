@@ -21,7 +21,7 @@ from state import ProbeState
 class App:
     """Everything the handler needs, behind one lock."""
 
-    def __init__(self, data_dir, probe_token, sender, static_dir=None):
+    def __init__(self, data_dir, probe_token, sender, static_dir=None, alerts_here=False):
         os.makedirs(data_dir, exist_ok=True)
         self.lock = threading.Lock()
         self.data_dir = data_dir
@@ -31,6 +31,7 @@ class App:
         self.state = ProbeState()
         self.alert_config = AlertConfig.load(self.alerts_path)
         self.monitor = AlertMonitor(self.alert_config, sender)
+        self.alerts_here = alerts_here
         self.started = time.time()
 
     # -- sampling loop ----------------------------------------------------
@@ -51,8 +52,12 @@ class App:
 
     def _ingest(self, s1, s2, b1, b2, now):
         reply = self.state.ingest(s1, s2, b1, b2, now)
-        for i, temp in enumerate(self.state.temps):
-            self.monitor.check(i + 1, temp, now)
+        # The box sends the alert mail, because the box is the part that has to
+        # be powered. The server only keeps the settings so the page can edit
+        # them. Checking here as well would send every message twice.
+        if self.alerts_here:
+            for i, temp in enumerate(self.state.temps):
+                self.monitor.check(i + 1, temp, now)
         return reply
 
     # -- API operations (each returns (status, body)) ---------------------
@@ -219,6 +224,7 @@ def main():
         probe_token=token,
         sender=sender,
         static_dir=os.environ.get("STATIC_DIR") or None,
+        alerts_here=os.environ.get("ALERTS_ON_SERVER", "0") == "1",
     )
     threading.Thread(target=app.run_sampler, daemon=True).start()
     port = int(os.environ.get("PORT", "8080"))

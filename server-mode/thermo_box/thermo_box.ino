@@ -27,12 +27,14 @@
   box being switched off. The seconds the box was away stay empty there, which
   is what requirement 5c.v asks for.
 
-  Alerts: the page's "Email or text when it goes out of range" form is
-  stored on the board (it survives power cycles) and read back with GET
-  and PUT /api/alerts, the same JSON as docs/api.md. The rule matches the
-  server: one message per crossing, per sensor, rearmed when the reading
-  comes back inside the band by half a degree. A send takes a few seconds
-  and the loop waits for it, so the LCD and page pause briefly.
+  Alerts: the box sends them, because the box is the part that has to be
+  powered. Requirement 7 wants the limits, the messages and the address
+  changed from the computer, so the page saves them to the server and the
+  box reads them back every ten seconds, keeping a copy in flash for when
+  the server cannot be reached. One message per crossing, per sensor,
+  rearmed when the reading comes back inside the band by half a degree.
+  A send takes a few seconds and the loop waits for it, so the LCD and the
+  page pause briefly.
 
   Wiring, from the schematic (2026-09-09):
     DS18B20 x2  DQ -> GPIO32, 4.7k pull-up to 3V3
@@ -71,6 +73,7 @@ const char *HOSTNAME = "thermo-box";     // http://thermo-box.local on the joine
 // waits longer, so an unreachable server cannot stall the sampling loop.
 const unsigned long POST_EVERY_MS = 500;
 const unsigned long POST_BACKOFF_MS = 5000;
+const unsigned long ALERT_FETCH_MS = 10000;   // how often the box rereads the settings
 
 OneWire bus(ONEWIRE_PIN);
 DallasTemperature probes(&bus);
@@ -102,6 +105,7 @@ bool wifiUp = false;               // joined WIFI_SSID and holding an address
 bool mdnsStarted = false;
 
 unsigned long nextPostMs = 0;      // when the next report to the server is due
+unsigned long nextAlertFetchMs = 0;
 WiFiClientSecure postClient;       // kept apart from the one the mail uses
 HTTPClient http;                   // holds the connection open between posts
 
@@ -179,6 +183,7 @@ void loop() {
   pollButtons();
   watchWifi();
   reportToServer();
+  fetchAlertSettings();
 
   if (millis() - lastSampleMs >= 1000) {
     lastSampleMs = millis();
@@ -346,6 +351,45 @@ void reportToServer() {
     nextPostMs = millis() + POST_BACKOFF_MS;
   }
   http.end();
+}
+
+// Requirement 7 wants the limits, the messages and the address changed from the
+// computer. The page saves them to the server, so the box reads them back from
+// there and keeps its own copy in flash for when the server cannot be reached.
+// The box is what sends the mail, because the box is what has to be powered.
+void fetchAlertSettings() {
+  if (!wifiUp || millis() < nextAlertFetchMs) return;
+  nextAlertFetchMs = millis() + ALERT_FETCH_MS;
+
+  String url = INGEST_URL;
+  url.replace("/ingest", "/api/alerts");
+
+  HTTPClient get;
+  get.setConnectTimeout(2000);
+  get.setTimeout(2000);
+  if (!get.begin(postClient, url)) return;
+  int code = get.GET();
+  if (code == 200) {
+    JsonDocument doc;
+    if (!deserializeJson(doc, get.getString())) {
+      AlertConfig next;
+      next.email = doc["email"] | "";
+      next.maxC = doc["max"] | alerts.maxC;
+      next.minC = doc["min"] | alerts.minC;
+      next.maxMessage = doc["maxMessage"] | alerts.maxMessage;
+      next.minMessage = doc["minMessage"] | alerts.minMessage;
+      bool changed = next.email != alerts.email || next.maxC != alerts.maxC ||
+                     next.minC != alerts.minC || next.maxMessage != alerts.maxMessage ||
+                     next.minMessage != alerts.minMessage;
+      if (changed) {
+        alerts = next;
+        saveAlerts();               // only on a change, so the flash is not worn out
+        latched[0] = latched[1] = NONE;   // new limits, so judge them fresh
+        Serial.println("Alert settings updated from the server");
+      }
+    }
+  }
+  get.end();
 }
 
 // ---- the joined network ----------------------------------------------------
