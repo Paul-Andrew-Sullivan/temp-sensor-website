@@ -31,7 +31,7 @@ One sample per second. `null` is missing data (box off or sensor unplugged at th
 
 Body `{ "sensor": 1, "on": false }`. Reply `{ "b1": true, "b2": false }` with the wanted state of both buttons. The board picks the change up on its next report.
 
-## GET and PUT /api/alerts (server only)
+## GET and PUT /api/alerts
 
 ```json
 {
