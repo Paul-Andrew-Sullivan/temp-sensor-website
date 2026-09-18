@@ -97,8 +97,8 @@ int histNext = 0;                  // index the next sample is written to
 unsigned long lastSampleMs = 0;
 int secondsSinceScan = 0;
 
-volatile bool pressPending[2] = {false, false};   // set by the button interrupt
-volatile unsigned long buttonChangedMs[2] = {0, 0};
+int buttonLevel[2] = {HIGH, HIGH};
+unsigned long buttonChangedMs[2] = {0, 0};
 
 unsigned long lcdHoldUntil = 0;    // readings stay off the LCD until this time
 volatile bool lcdDirty = false;    // the network core asks for a redraw this way
@@ -144,16 +144,12 @@ Latch sentKind = NONE;
 bool sentOk = false;
 String sentTo;
 
-void IRAM_ATTR onButton(void *arg);   // the IDE writes no prototype for this one
 void networkLoop(void *arg);
 
 void setup() {
   Serial.begin(115200);
   pinMode(BUTTON_PIN[0], INPUT);
   pinMode(BUTTON_PIN[1], INPUT);
-  // FALLING: the pins idle high on their external pull-ups and a press pulls low.
-  attachInterruptArg(BUTTON_PIN[0], onButton, (void *)0, FALLING);
-  attachInterruptArg(BUTTON_PIN[1], onButton, (void *)1, FALLING);
 
   for (int i = 0; i < 2; i++)
     for (int k = 0; k < HISTORY; k++) history[i][k] = NAN;
@@ -175,10 +171,21 @@ void setup() {
   WiFi.setHostname(HOSTNAME);
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
+#ifdef WIFI_USERNAME
+  // A network that asks for a username is WPA2-Enterprise, the kind universities
+  // run. It needs the 802.1X form of begin(); the ordinary one never associates.
+  WiFi.begin(WIFI_SSID, WPA2_AUTH_PEAP, WIFI_IDENTITY, WIFI_USERNAME, WIFI_PASSWORD);
+#else
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);   // returns at once; watchWifi() sees it join
+#endif
   Serial.println();
   Serial.print("Joining ");
-  Serial.println(WIFI_SSID);
+  Serial.print(WIFI_SSID);
+#ifdef WIFI_USERNAME
+  Serial.println(" (WPA2-Enterprise)");
+#else
+  Serial.println();
+#endif
   lcdLine(0, "Thermo box");
   lcdLine(1, String("joining ") + WIFI_SSID);
   // No delay here on purpose. Requirement 6 gives the box ten seconds from
@@ -311,26 +318,26 @@ void printReadings() {
 
 // A press toggles that sensor's display. Level changes closer than 40 ms to
 // the last accepted one are ignored, which covers the contact bounce.
-// The pins interrupt rather than being read in the loop. Posting to the server
-// blocks for a few hundred milliseconds, and a press that began and ended inside
-// one of those was simply never seen: the pin went low and high again while the
-// loop was waiting on the network. An interrupt catches it whatever the loop is
-// doing. Debouncing happens here too, since the bounce is on the same edge.
-void IRAM_ATTR onButton(void *arg) {
-  int i = (int)(intptr_t)arg;
-  unsigned long now = millis();
-  if (now - buttonChangedMs[i] < 40) return;
-  buttonChangedMs[i] = now;
-  pressPending[i] = true;
-}
-
+// Reads the level rather than taking an interrupt. The buttons sit behind a 1k
+// series resistor and a 0.1uF cap, so releasing one lets the 10k pull-up charge
+// the cap slowly. That lazy rising edge throws spurious falling edges, and an
+// interrupt counts them as a second press: the display came on while the button
+// was held and went off the moment it was let go. A level test cannot be fooled
+// that way, because a glitch on release still reads high. This is fast enough
+// now that the loop no longer waits on the network: it runs every few hundred
+// microseconds, far inside the 20 ms requirement 4a allows.
 void pollButtons() {
   for (int i = 0; i < 2; i++) {
-    if (!pressPending[i]) continue;
-    pressPending[i] = false;
-    shown[i] = !shown[i];
-    lcdHoldUntil = 0;   // requirement 4a wants the answer on screen quickly, so a
-    updateLcd();        // press clears whatever notice is holding the screen
+    int level = digitalRead(BUTTON_PIN[i]);
+    if (level == buttonLevel[i]) continue;
+    if (millis() - buttonChangedMs[i] < 40) continue;   // contact bounce
+    buttonChangedMs[i] = millis();
+    buttonLevel[i] = level;
+    if (level == LOW) {                  // pressed, not released
+      shown[i] = !shown[i];
+      lcdHoldUntil = 0;
+      updateLcd();
+    }
   }
 }
 

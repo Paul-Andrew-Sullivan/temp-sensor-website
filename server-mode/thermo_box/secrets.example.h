@@ -16,3 +16,10 @@
 // the line of the same name in the server's .env.
 #define INGEST_URL  "https://thermobox.paulandrewsullivan.com/ingest"
 #define PROBE_TOKEN "the-probe-token-from-the-server-env"
+
+// Only for a network that asks for a username as well as a password, the
+// WPA2-Enterprise kind most universities run. Leave all three commented out
+// for a home network or a phone hotspot, which use WIFI_PASSWORD alone.
+// WIFI_IDENTITY is usually the same as WIFI_USERNAME.
+//#define WIFI_IDENTITY "hawkid@uiowa.edu"
+//#define WIFI_USERNAME "hawkid@uiowa.edu"

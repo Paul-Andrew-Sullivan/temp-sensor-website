@@ -32,9 +32,7 @@ a { color: var(--ink); }
 .section-heading .units { margin: 0; }
 .readings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
 .reading { display: flex; flex-direction: column; gap: 12px; padding: 22px 24px; background: var(--soft); border: 1px solid var(--rule); border-radius: 16px; }
-.reading .display-toggle { display: inline-flex; align-items: center; gap: 10px; align-self: flex-start; margin: auto 0 0; padding: 10px 0 0; background: transparent; color: var(--ink); font: 14px/1.5 system-ui, sans-serif; }
-.display-toggle::before { content: ""; width: 38px; height: 22px; border-radius: 999px; background: radial-gradient(circle at 11px 11px, var(--surface) 7px, transparent 8px), var(--faint); }
-.display-toggle[aria-checked="true"]::before { background: radial-gradient(circle at 27px 11px, var(--surface) 7px, transparent 8px), var(--ink); }
+.reading .display-toggle { align-self: flex-start; margin: auto 0 0; font: 14px/1.5 system-ui, sans-serif; }
 .reading .val { font: 60px/1 "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; letter-spacing: -0.02em; white-space: nowrap; }
 .reading .val.msg { font: italic 24px/1.3 Georgia, serif; color: var(--faint); padding: 8px 0; white-space: normal; }
 .reading .val.msg.bad { color: var(--red); }
@@ -101,12 +99,12 @@ footer nav { max-width: 280px; }
       <div class="reading">
         <div class="lbl">Sensor 1</div>
         <div class="val" id="t1">—</div>
-        <button class="display-toggle" id="b1" type="button" role="switch" aria-checked="true" aria-label="Sensor 1 display on the box">Display on</button>
+        <button class="display-toggle" id="b1" type="button">Turn display off</button>
       </div>
       <div class="reading">
         <div class="lbl">Sensor 2</div>
         <div class="val" id="t2">—</div>
-        <button class="display-toggle" id="b2" type="button" role="switch" aria-checked="true" aria-label="Sensor 2 display on the box">Display on</button>
+        <button class="display-toggle" id="b2" type="button">Turn display off</button>
       </div>
     </div>
 </section>
@@ -337,8 +335,8 @@ else if (!on[i]) { el.textContent = "turned off"; el.className = "val msg"; }
 else if (!plugged[i]) { el.textContent = "unplugged sensor"; el.className = "val msg bad"; }
 else { el.textContent = fmt(cur[i]); el.className = "val"; }
 const b = $("b" + (i + 1));
-b.textContent = "Display " + (on[i] ? "on" : "off");
-b.setAttribute("aria-checked", String(on[i]));
+b.textContent = on[i] ? "Turn display off" : "Turn display on";
+b.setAttribute("aria-label", (on[i] ? "Turn sensor " : "Turn sensor ") + (i + 1) + (on[i] ? " display off on the box" : " display on on the box"));
 }
 }
 async function request(url, options = {}) {
