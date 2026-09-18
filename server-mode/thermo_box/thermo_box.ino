@@ -109,6 +109,7 @@ bool mdnsStarted = false;
 
 unsigned long nextPostMs = 0;      // when the next report to the server is due
 unsigned long nextAlertFetchMs = 0;
+unsigned long nextWifiReportMs = 0;
 WiFiClientSecure postClient;       // kept apart from the one the mail uses
 // The settings fetch gets its own connection. Sharing one with the report meant
 // each fetch closed the report's connection, and both then paid for a fresh TLS
@@ -462,8 +463,38 @@ void fetchAlertSettings() {
 // Runs every loop. The first time the box joins WIFI_SSID it prints the
 // address, answers to thermo-box.local, and asks an NTP server for the time
 // so the mail carries a real date.
+// Says what the radio is doing while it is not connected. Without this a join
+// that never succeeds is completely silent: no message is printed, because the
+// state never changes, and the box looks healthy while nothing reaches it.
+const char *wifiStatusName(int st) {
+  switch (st) {
+    case WL_IDLE_STATUS:     return "idle";
+    case WL_NO_SSID_AVAIL:   return "no such network in range";
+    case WL_SCAN_COMPLETED:  return "scan finished";
+    case WL_CONNECTED:       return "connected";
+    case WL_CONNECT_FAILED:  return "rejected, check the password or username";
+    case WL_CONNECTION_LOST: return "connection lost";
+    case WL_DISCONNECTED:    return "disconnected";
+    default:                 return "unknown";
+  }
+}
+
 void watchWifi() {
   bool up = WiFi.status() == WL_CONNECTED;
+
+  if (!up && millis() > nextWifiReportMs) {
+    nextWifiReportMs = millis() + 5000;
+    int st = WiFi.status();
+    Serial.print("Not on ");
+    Serial.print(WIFI_SSID);
+    Serial.print(": ");
+    Serial.print(wifiStatusName(st));
+    Serial.print(" (");
+    Serial.print(st);
+    Serial.println(")");
+    lcdLine(1, "no wifi");
+  }
+
   if (up == wifiUp) return;
   wifiUp = up;
   if (!up) {
@@ -562,7 +593,24 @@ bool sendMail(const String &to, const String &subject, const String &body) {
     return false;
   }
   Serial.print("Sending mail to ");
-  Serial.println(to);
+  Serial.print(to);
+  Serial.print("  (free heap ");
+  Serial.print(ESP.getFreeHeap());
+  Serial.print(", largest block ");
+  Serial.print(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+  Serial.print(", on ");
+  Serial.print(WiFi.localIP());
+  Serial.println(")");
+
+  // A TLS handshake wants a large contiguous lump of heap. The report and the
+  // settings each hold one open all the time, so hand theirs back first and let
+  // them reconnect afterwards: mail is rare, and the alternative is no mail.
+  http.end(); postClient.stop();
+  alertHttp.end(); alertClient.stop();
+  Serial.print("  after freeing the other two: heap ");
+  Serial.print(ESP.getFreeHeap());
+  Serial.print(", largest block ");
+  Serial.println(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
 
   sslClient.setInsecure();   // the board has no root certificate store
   bool ok = false;
