@@ -97,16 +97,27 @@ int histNext = 0;                  // index the next sample is written to
 unsigned long lastSampleMs = 0;
 int secondsSinceScan = 0;
 
-int buttonLevel[2] = {HIGH, HIGH};
-unsigned long buttonChangedMs[2] = {0, 0};
+volatile bool pressPending[2] = {false, false};   // set by the button interrupt
+volatile unsigned long buttonChangedMs[2] = {0, 0};
 
 unsigned long lcdHoldUntil = 0;    // readings stay off the LCD until this time
+volatile bool lcdDirty = false;    // the network core asks for a redraw this way
+volatile bool haveNotice = false;  // an address to show, handed over from that core
+char noticeLine[17] = "";
 bool wifiUp = false;               // joined WIFI_SSID and holding an address
 bool mdnsStarted = false;
 
 unsigned long nextPostMs = 0;      // when the next report to the server is due
 unsigned long nextAlertFetchMs = 0;
 WiFiClientSecure postClient;       // kept apart from the one the mail uses
+// The settings fetch gets its own connection. Sharing one with the report meant
+// each fetch closed the report's connection, and both then paid for a fresh TLS
+// handshake: a 1.7 s stall every ten seconds, right on requirement 5b's path.
+WiFiClientSecure alertClient;
+// Global, not a local in the fetch. A local HTTPClient is destroyed when the
+// function returns, which closes the connection whatever setReuse says, so
+// every fetch paid for a fresh TLS handshake: about 1.9 s on a phone hotspot.
+HTTPClient alertHttp;
 HTTPClient http;                   // holds the connection open between posts
 
 // ---- alert settings and state ---------------------------------------------
@@ -133,10 +144,16 @@ Latch sentKind = NONE;
 bool sentOk = false;
 String sentTo;
 
+void IRAM_ATTR onButton(void *arg);   // the IDE writes no prototype for this one
+void networkLoop(void *arg);
+
 void setup() {
   Serial.begin(115200);
   pinMode(BUTTON_PIN[0], INPUT);
   pinMode(BUTTON_PIN[1], INPUT);
+  // FALLING: the pins idle high on their external pull-ups and a press pulls low.
+  attachInterruptArg(BUTTON_PIN[0], onButton, (void *)0, FALLING);
+  attachInterruptArg(BUTTON_PIN[1], onButton, (void *)1, FALLING);
 
   for (int i = 0; i < 2; i++)
     for (int k = 0; k < HISTORY; k++) history[i][k] = NAN;
@@ -154,6 +171,7 @@ void setup() {
   probes.requestTemperatures();
 
   postClient.setInsecure();   // no CA bundle on the board; the token is the check
+  alertClient.setInsecure();
   WiFi.setHostname(HOSTNAME);
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
@@ -175,15 +193,21 @@ void setup() {
   server.onNotFound([]() { server.send(404, "text/plain", "not found"); });
   server.begin();
 
+  xTaskCreatePinnedToCore(networkLoop, "net", 16384, NULL, 1, NULL, 0);
+
   lastSampleMs = millis();
 }
 
 void loop() {
   server.handleClient();
   pollButtons();
-  watchWifi();
-  reportToServer();
-  fetchAlertSettings();
+  if (haveNotice) {                      // an address arrived from the other core
+    haveNotice = false;
+    lcdLine(0, String("on ") + WIFI_SSID);
+    lcdLine(1, noticeLine);
+    lcdHoldUntil = millis() + 3000;
+  }
+  if (lcdDirty) { lcdDirty = false; updateLcd(); }
 
   if (millis() - lastSampleMs >= 1000) {
     lastSampleMs = millis();
@@ -196,7 +220,6 @@ void loop() {
     recordSample();
     updateLcd();
     printReadings();
-    checkAlerts();
   }
 }
 
@@ -288,18 +311,40 @@ void printReadings() {
 
 // A press toggles that sensor's display. Level changes closer than 40 ms to
 // the last accepted one are ignored, which covers the contact bounce.
+// The pins interrupt rather than being read in the loop. Posting to the server
+// blocks for a few hundred milliseconds, and a press that began and ended inside
+// one of those was simply never seen: the pin went low and high again while the
+// loop was waiting on the network. An interrupt catches it whatever the loop is
+// doing. Debouncing happens here too, since the bounce is on the same edge.
+void IRAM_ATTR onButton(void *arg) {
+  int i = (int)(intptr_t)arg;
+  unsigned long now = millis();
+  if (now - buttonChangedMs[i] < 40) return;
+  buttonChangedMs[i] = now;
+  pressPending[i] = true;
+}
+
 void pollButtons() {
   for (int i = 0; i < 2; i++) {
-    int level = digitalRead(BUTTON_PIN[i]);
-    if (level == buttonLevel[i]) continue;
-    if (millis() - buttonChangedMs[i] < 40) continue;
-    buttonChangedMs[i] = millis();
-    buttonLevel[i] = level;
-    if (level == LOW) {
-      shown[i] = !shown[i];
-      lcdHoldUntil = 0;   // requirement 4a wants the answer on screen inside 20 ms,
-      updateLcd();        // so a press clears whatever notice is holding the screen
-    }
+    if (!pressPending[i]) continue;
+    pressPending[i] = false;
+    shown[i] = !shown[i];
+    lcdHoldUntil = 0;   // requirement 4a wants the answer on screen quickly, so a
+    updateLcd();        // press clears whatever notice is holding the screen
+  }
+}
+
+// Everything that waits on the network runs on the other core. Requirement 4a
+// allows about 20 ms between a press and the screen, and a single HTTPS post
+// blocks for hundreds of milliseconds, so the loop cannot be the thing doing it.
+// Core 1 keeps the buttons, the screen and the probes; core 0 does the talking.
+void networkLoop(void *arg) {
+  for (;;) {
+    watchWifi();
+    reportToServer();
+    fetchAlertSettings();
+    checkAlerts();            // sending mail blocks for seconds, so not on core 1
+    vTaskDelay(pdMS_TO_TICKS(20));
   }
 }
 
@@ -331,15 +376,24 @@ void reportToServer() {
   http.addHeader("Content-Type", "application/json");
   http.addHeader("X-Probe-Token", PROBE_TOKEN);
 
+  unsigned long began = millis();
   int code = http.POST(body);
+  unsigned long took = millis() - began;
+  // The loop cannot watch anything while this runs, so say when it runs long.
+  if (took > 200) { Serial.print("slow post: "); Serial.print(took); Serial.println(" ms"); }
   if (code == 200) {
-    String reply = http.getString();
-    bool want[2] = { reply.indexOf("\"b1\":true") >= 0, reply.indexOf("\"b2\":true") >= 0 };
-    for (int i = 0; i < 2; i++) {
-      if (want[i] == shown[i]) continue;
-      shown[i] = want[i];        // the page pressed it, so the screen follows
-      lcdHoldUntil = 0;
-      updateLcd();
+    // Read the reply as JSON rather than looking for text in it. The server
+    // writes {"b1": true}, with a space, and a search for "b1":true finds
+    // nothing there and quietly turns both displays off twice a second.
+    JsonDocument doc;
+    if (!deserializeJson(doc, http.getString())) {
+      bool want[2] = { doc["b1"] | shown[0], doc["b2"] | shown[1] };
+      for (int i = 0; i < 2; i++) {
+        if (want[i] == shown[i]) continue;
+        shown[i] = want[i];        // the page pressed it, so the screen follows
+        lcdHoldUntil = 0;
+        lcdDirty = true;           // the loop core does the drawing
+      }
     }
     nextPostMs = millis() + POST_EVERY_MS;
   } else {
@@ -364,11 +418,15 @@ void fetchAlertSettings() {
   String url = INGEST_URL;
   url.replace("/ingest", "/api/alerts");
 
-  HTTPClient get;
+  HTTPClient &get = alertHttp;
+  get.setReuse(true);
   get.setConnectTimeout(2000);
   get.setTimeout(2000);
-  if (!get.begin(postClient, url)) return;
+  if (!get.begin(alertClient, url)) return;
+  unsigned long began = millis();
   int code = get.GET();
+  unsigned long took = millis() - began;
+  if (took > 200) { Serial.print("slow alert fetch: "); Serial.print(took); Serial.println(" ms"); }
   if (code == 200) {
     JsonDocument doc;
     if (!deserializeJson(doc, get.getString())) {
@@ -415,9 +473,8 @@ void watchWifi() {
   Serial.println(".local");
   if (!mdnsStarted) mdnsStarted = MDNS.begin(HOSTNAME);
   configTime(0, 0, "pool.ntp.org");
-  lcdLine(0, String("on ") + WIFI_SSID);
-  lcdLine(1, ip);
-  lcdHoldUntil = millis() + 3000;
+  ip.toCharArray(noticeLine, sizeof(noticeLine));
+  haveNotice = true;
 }
 
 // ---- alerts ----------------------------------------------------------------
