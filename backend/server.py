@@ -1,4 +1,4 @@
-"""HTTP API for the thermometer. Standard library only.
+"""HTTP API for the thermometer and the electric eye. Standard library only.
 
 Run:  python3 server.py
 Env:  PORT (8080), DATA_DIR (./data), PROBE_TOKEN, RESEND_API_KEY,
@@ -15,6 +15,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from alerts import AlertConfig, AlertMonitor, resend_sender
+from eye import EyeAlerts, EyeState
 from state import ProbeState
 
 
@@ -32,6 +33,9 @@ class App:
         self.alert_config = AlertConfig.load(self.alerts_path)
         self.monitor = AlertMonitor(self.alert_config, sender)
         self.alerts_here = alerts_here
+        self.eye = EyeState()
+        self.eye_alerts_path = os.path.join(data_dir, "eye_alerts.json")
+        self.eye_alerts = EyeAlerts.load(self.eye_alerts_path)
         self.started = time.time()
 
     # -- sampling loop ----------------------------------------------------
@@ -40,6 +44,7 @@ class App:
         now = time.time() if now is None else now
         with self.lock:
             self.state.tick(now)
+            self.eye.tick(now)
 
     def run_sampler(self):
         while True:
@@ -111,6 +116,38 @@ class App:
             reply = self._ingest(data.get("s1"), data.get("s2"), data.get("b1", True), data.get("b2", True), time.time())
             return 200, reply
 
+    # -- electric eye -----------------------------------------------------
+
+    def get_eye(self):
+        with self.lock:
+            return 200, self.eye.view(time.time())
+
+    def post_eye_ingest(self, data, token):
+        if not self.probe_token or token != self.probe_token:
+            return 401, {"error": "bad or missing X-Probe-Token"}
+        if not isinstance(data, dict):
+            return 400, {"error": "body must be an object"}
+        with self.lock:
+            # The board sends the beam-broken mail itself, for the same reason
+            # as the thermometer: the server only keeps the settings.
+            try:
+                self.eye.ingest(data, time.time())
+            except ValueError as exc:
+                return 400, {"error": str(exc)}
+            return 200, {"ok": True}
+
+    def get_eye_alerts(self):
+        with self.lock:
+            return 200, self.eye_alerts.to_dict()
+
+    def put_eye_alerts(self, data):
+        if not isinstance(data, dict):
+            return 400, {"error": "body must be an object"}
+        with self.lock:
+            self.eye_alerts.update(data)
+            self.eye_alerts.save(self.eye_alerts_path)
+            return 200, self.eye_alerts.to_dict()
+
     def healthz(self):
         with self.lock:
             return 200, {"ok": True, "uptime": int(time.time() - self.started), "box": self.state.box_on(time.time())}
@@ -180,6 +217,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(*self.app.get_history())
         if path == "/api/alerts":
             return self._json(*self.app.get_alerts())
+        if path == "/api/eye":
+            return self._json(*self.app.get_eye())
+        if path == "/api/eye/alerts":
+            return self._json(*self.app.get_eye_alerts())
         if path == "/healthz":
             return self._json(*self.app.healthz())
         if path.startswith("/api/"):
@@ -195,6 +236,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(*self.app.post_button(data))
         if path == "/ingest":
             return self._json(*self.app.post_ingest(data, self.headers.get("X-Probe-Token")))
+        if path == "/eye/ingest":
+            return self._json(*self.app.post_eye_ingest(data, self.headers.get("X-Probe-Token")))
         return self._json(404, {"error": "not found"})
 
     def do_PUT(self):
@@ -204,6 +247,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(400, {"error": "body must be JSON"})
         if path == "/api/alerts":
             return self._json(*self.app.put_alerts(data))
+        if path == "/api/eye/alerts":
+            return self._json(*self.app.put_eye_alerts(data))
         return self._json(404, {"error": "not found"})
 
 

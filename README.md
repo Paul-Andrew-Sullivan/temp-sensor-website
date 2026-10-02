@@ -9,12 +9,16 @@ ECE:4880 Lab 1, fall 2026. The computer-side interface for a two-sensor thermome
 
 Both pages read "No data available" until a board reports. See **The board** below.
 
+## Electric eye (Lab 2)
+
+The Lab 2 IR beam interrupter reports to the same backend. Its page is https://thermobox.paulandrewsullivan.com/eye.html (`esp32-site/eye.html`): the beam state, the signal level against the two thresholds, a 300 s chart with broken seconds shaded, the last 50 beam changes and the alert settings the board reads. The board posts to `/eye/ingest` with the same `X-Probe-Token`; the routes are in `docs/api.md`.
+
 ## Layout
 
 ```
-esp32-site/     index.html — the lean page, one file, inline CSS and JS
+esp32-site/     index.html — the lean page, one file, inline CSS and JS. eye.html — the electric eye page
 server-site/    index.html, styles.css, app.js, chart.js, thermo3d.js, vendor/ (three.js r160), models/thermometer.glb
-backend/        server.py (HTTP API), state.py (ring buffer, buttons), alerts.py (thresholds, Resend)
+backend/        server.py (HTTP API), state.py (ring buffer, buttons), alerts.py (thresholds, Resend), eye.py (electric eye)
 deploy/         nginx configs, container run scripts, deploy.sh, env.example
 firmware/       thermo_box/ — the standalone sketch. thermo_simple/ — probes and LCD only
 docs/           design.md, plan.md, api.md, resend.md

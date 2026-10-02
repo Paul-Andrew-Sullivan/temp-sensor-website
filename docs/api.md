@@ -66,3 +66,51 @@ Reply `{ "b1": true, "b2": false }` is the wanted button state. If it differs fr
 ## GET /healthz
 
 `{ "ok": true, "uptime": 123, "box": true }`
+
+## Electric eye (Lab 2)
+
+The IR beam interrupter reports to the same backend with the same `PROBE_TOKEN`. The board sends its own beam-broken mail; the server only stores the settings so `eye.html` can edit them.
+
+### POST /eye/ingest (the board's route)
+
+Header `X-Probe-Token`. Body:
+
+```json
+{ "beam": "broken", "level": 0.412, "on": 0.30, "off": 0.21, "breaches": 3, "lastAlert": { "t": 1788363892889, "ok": true, "to": "name@example.com" } }
+```
+
+- `beam`: `"clear"` or `"broken"`. Anything else is a 400.
+- `level`: the receiver's envelope level. `on`/`off`: the board's two thresholds.
+- `breaches`: the board's own count of breaks.
+- `lastAlert`: the last message the board sent, or `null`.
+
+Reply `{ "ok": true }`. 401 without the right token, 400 on bad JSON.
+
+### GET /api/eye
+
+```json
+{
+  "online": true,
+  "t": 1788363892889,
+  "beam": "clear",
+  "level": 0.412, "on": 0.30, "off": 0.21,
+  "breaches": 3,
+  "lastAlert": null,
+  "lastSeen": 1788363892500,
+  "history": { "level": [ ...300 numbers or null... ], "beam": [ ...300 of "clear", "broken" or null... ] },
+  "events": [ { "t": 1788363880000, "state": "broken" }, { "t": 1788363884000, "state": "clear" } ]
+}
+```
+
+- `online` is `false` when no report has arrived for 3 seconds. Then `beam` is `"unknown"` and `level`, `on` and `off` are `null`. `breaches` and `lastAlert` keep their last values.
+- `lastSeen` is the time of the last report, `null` if there has never been one.
+- `history` is one sample per second, newest last, `null` while offline.
+- `events` is every beam change the server has seen, at most the last 50, newest last. The first report after the server starts is not counted as a change.
+
+### GET and PUT /api/eye/alerts
+
+```json
+{ "email": "", "subject": "Electric eye: beam broken", "message": "The beam was interrupted." }
+```
+
+PUT accepts any subset of the three fields. Values are trimmed and capped at 200 characters (500 for `message`). Saved to `eye_alerts.json` in the data directory.

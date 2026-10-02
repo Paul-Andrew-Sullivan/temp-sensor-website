@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Electric eye</title>
+<link rel="icon" href="data:,">
+<meta name="description" content="Live beam state, signal level, a 300-second chart and the break history for the ECE:4880 electric eye, reported by an ESP32.">
+<style>
+:root { --ink: #1a1a1a; --paper: #f6f5f2; --surface: #fff; --soft: #eeede9; --rule: #cfcac0; --faint: #6b675f; --red: #b3261e; --hatch: #e2ded6; }
+:root[data-theme="dark"] { color-scheme: dark; --ink: #f0ede7; --paper: #17191c; --surface: #22252a; --soft: #282c32; --rule: #494b50; --faint: #b8b5ae; --red: #ff8076; --hatch: #34373d; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 17px/1.5 Georgia, "Times New Roman", serif; }
+main { max-width: 1200px; margin: 0 auto; padding: 40px 22px 60px; }
+.site-header { display: flex; justify-content: space-between; align-items: start; gap: 24px; padding-bottom: 24px; border-bottom: 1px solid var(--rule); }
+.site-header > div { min-width: 0; }
+.site-header .status { margin: 12px 0 0; font-size: 14px; }
+#theme-toggle { flex-shrink: 0; margin: 0; background: var(--surface); color: var(--ink); border: 1px solid var(--rule); border-radius: 999px; font-size: 14px; padding: 10px 16px; }
+h1 { font-size: 36px; line-height: 1.15; margin: 0 0 6px; font-weight: 400; }
+h2 { font-size: 20px; margin: 0 0 14px; font-weight: 400; }
+p { margin: 0 0 10px; max-width: 62ch; }
+.status { color: var(--faint); }
+.status.off { color: var(--red); }
+a { color: var(--ink); }
+.overview { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; margin: 28px 0; }
+.reading { display: flex; flex-direction: column; gap: 12px; padding: 22px 24px; background: var(--soft); border: 1px solid var(--rule); border-radius: 16px; }
+.lbl { margin: 0; color: var(--faint); font: 600 13px/1.4 system-ui, sans-serif; letter-spacing: 0.06em; text-transform: uppercase; }
+.mono { font-family: "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; }
+#beam { font-size: 60px; line-height: 1; }
+#beam.broken { color: var(--red); }
+#beam.msg { font: italic 32px/1.3 Georgia, serif; color: var(--faint); padding: 8px 0; }
+#breaches { font-size: 15px; color: var(--faint); margin: 0; }
+.bar { position: relative; height: 28px; background: var(--paper); border: 1px solid var(--rule); }
+#fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--ink); }
+#fill.broken { background: var(--red); }
+.mark { position: absolute; top: -6px; bottom: -6px; width: 0; border-left: 2px dashed var(--faint); display: none; }
+.levels { display: flex; flex-wrap: wrap; gap: 4px 24px; margin: 0; font-size: 15px; }
+#level { font-size: 40px; line-height: 1; }
+button { font: inherit; background: var(--ink); color: var(--paper); border: 0; border-radius: 9px; padding: 10px 16px; margin: 6px 12px 6px 0; cursor: pointer; }
+button:hover { filter: brightness(0.92); }
+:is(button, a, input, textarea):focus-visible { outline: 3px solid var(--red); outline-offset: 4px; }
+.panel { margin-top: 24px; padding: 26px; background: var(--surface); border: 1px solid var(--rule); border-radius: 18px; }
+.panel p { font-size: 15px; }
+.chart-scroll { overflow-x: auto; margin: 16px 0 0; }
+canvas { display: block; width: 100%; min-width: 620px; height: auto; }
+#events { list-style: none; margin: 0; padding: 0; max-height: 360px; overflow-y: auto; font-size: 15px; }
+#events li { display: flex; gap: 20px; padding: 6px 0; border-bottom: 1px solid var(--soft); }
+#events time { color: var(--faint); min-width: 7em; }
+#events .broken { color: var(--red); }
+label { display: block; margin: 10px 0 2px; color: var(--faint); }
+input, textarea { font: inherit; width: 100%; max-width: 520px; padding: 6px 8px; border: 1px solid var(--rule); border-radius: 0; background: var(--paper); color: var(--ink); }
+textarea { height: 64px; }
+#saved { color: var(--faint); }
+footer { margin-top: 48px; padding-top: 28px; border-top: 1px solid var(--rule); color: var(--faint); font-size: 14px; line-height: 1.7; }
+.footer-grid { display: grid; grid-template-columns: 1.5fr 1fr 1fr; gap: 40px; padding-bottom: 28px; }
+.footer-grid > * { min-width: 0; }
+footer h2 { margin: 0 0 14px; color: var(--ink); font: 600 12px/1.5 system-ui, sans-serif; letter-spacing: 0.08em; text-transform: uppercase; }
+footer p { margin: 0; }
+.team-list { list-style: none; margin: 0; padding: 0; }
+.team-list li + li { margin-top: 4px; }
+footer nav a { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 5px 0; text-decoration-color: var(--rule); text-underline-offset: 4px; }
+footer nav a:hover { text-decoration-color: var(--ink); }
+.footer-meta { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px 24px; padding-top: 18px; border-top: 1px solid var(--rule); font: 12px/1.6 system-ui, sans-serif; }
+@media (max-width: 700px) { main { padding: 24px 18px 40px; }
+.site-header { gap: 14px; flex-wrap: wrap; }
+h1 { font-size: 30px; }
+.overview { grid-template-columns: 1fr; gap: 14px; }
+#beam { font-size: 46px; }
+.panel { padding: 18px; }
+.footer-grid { grid-template-columns: 1fr; gap: 24px; }
+footer nav { max-width: 280px; }
+}
+</style>
+</head>
+<body>
+<main>
+<header class="site-header">
+<div>
+<h1>Electric eye</h1>
+<p class="status" id="line">Waiting for the first report from the eye.</p>
+</div>
+<button id="theme-toggle" type="button" aria-pressed="false">Dark mode</button>
+</header>
+
+<section class="overview" aria-label="Live state">
+  <div class="reading">
+    <div class="lbl">Beam</div>
+    <div id="beam" class="msg" aria-live="polite">No data available</div>
+    <p id="breaches"></p>
+  </div>
+  <div class="reading">
+    <div class="lbl">Signal level</div>
+    <div id="level" class="mono">&mdash;</div>
+    <div class="bar" aria-hidden="true"><div id="fill"></div><div class="mark" id="mon"></div><div class="mark" id="moff"></div></div>
+    <p class="levels"><span id="lon">On threshold &mdash;</span><span id="loff">Off threshold &mdash;</span></p>
+  </div>
+</section>
+
+<section class="panel" aria-labelledby="history-heading">
+<h2 id="history-heading">Last 300 seconds</h2>
+<p>The line is the signal level. Red shading marks seconds when the beam was broken; hatching marks seconds with no report.</p>
+<div class="chart-scroll"><canvas id="chart" width="1880" height="760" role="img" aria-label="Signal level over the last 300 seconds"></canvas></div>
+</section>
+
+<section class="panel" aria-labelledby="events-heading">
+<h2 id="events-heading">Beam changes</h2>
+<p id="noevents">No changes seen since the server started.</p>
+<ul id="events"></ul>
+</section>
+
+<section class="panel" id="alerts" aria-labelledby="alerts-heading">
+<h2 id="alerts-heading">Email or text when the beam is broken</h2>
+<p>The eye sends the message itself when the beam breaks. For a text, use your carrier's email-to-SMS address, for example 3195551234@txt.att.net.</p>
+<label for="email">Send to</label><input id="email" placeholder="name@example.com" autocomplete="email">
+<label for="subject">Subject</label><input id="subject">
+<label for="message">Message</label><textarea id="message"></textarea>
+<p style="margin-top:12px"><button type="button" id="save">Save</button><span id="saved"></span></p>
+<p class="status" id="lastsent"></p>
+</section>
+
+<footer>
+  <div class="footer-grid">
+    <section aria-labelledby="project-heading">
+      <h2 id="project-heading">About the project</h2>
+      <p>An ESP32 watches an infrared beam and reports to this server whether it is clear or broken, along with the received signal level. This page shows that report and the last 300 seconds of it.</p>
+    </section>
+    <section aria-labelledby="team-heading">
+      <h2 id="team-heading">Team members</h2>
+      <ul class="team-list">
+        <li>Paul Sullivan</li>
+        <li>Tahsan Ul Alam</li>
+        <li>Daniel Marshall</li>
+        <li>Sam Smith</li>
+      </ul>
+    </section>
+    <nav aria-labelledby="links-heading">
+      <h2 id="links-heading">Project links</h2>
+      <a href="/">Thermometer page <span aria-hidden="true">&rarr;</span></a>
+      <a href="https://github.com/Paul-Andrew-Sullivan/temp-sensor-website">Source on GitHub <span aria-hidden="true">&nearr;</span></a>
+    </nav>
+  </div>
+  <div class="footer-meta">
+    <p>ECE:4880 Principles of ECE/CSE Design &middot; Lab 2 &middot; Fall 2026</p>
+    <p>Built October 2026</p>
+  </div>
+</footer>
+</main>
+<script>
+(function () {
+"use strict";
+const N = 300;
+const $ = (id) => document.getElementById(id);
+const canvas = $("chart"), cx = canvas.getContext("2d");
+let eye = null;
+let shownEvent = 0;   // time of the newest event in the list, so it is rebuilt only when one arrives
+
+// Level axis runs from 0 to at least 1, wider if a reading or threshold is above that.
+function top(e) {
+let hi = 1;
+for (const v of [...e.history.level, e.on, e.off, e.level]) if (v != null && v > hi) hi = v;
+return Math.ceil(hi * 4) / 4;
+}
+function hatch(color, x, y, w, h) {
+cx.save();
+cx.beginPath(); cx.rect(x, y, w, h); cx.clip();
+cx.strokeStyle = color; cx.lineWidth = 2;
+for (let d = -h; d < w; d += 12) { cx.beginPath(); cx.moveTo(x + d, y + h); cx.lineTo(x + d + h, y); cx.stroke(); }
+cx.restore();
+}
+function draw() {
+const css = getComputedStyle(canvas);
+const ink = css.getPropertyValue("--ink").trim(), faint = css.getPropertyValue("--faint").trim();
+const red = css.getPropertyValue("--red").trim(), hatchColor = css.getPropertyValue("--hatch").trim();
+const W = canvas.width, H = canvas.height, L = 150, R = 170, T = 70, B = 90;
+const pw = W - L - R, ph = H - T - B, colw = pw / N;
+cx.clearRect(0, 0, W, H);
+if (!eye) return;
+const level = eye.history.level.slice(-N), beam = eye.history.beam.slice(-N);
+const hi = top(eye);
+const y = (v) => T + ph * (1 - Math.min(v, hi) / hi);
+// Shade runs of broken or missing seconds first, so the line draws over them.
+let start = 0;
+for (let i = 1; i <= N; i++) {
+if (i < N && beam[i] === beam[start]) continue;
+const x = L + colw * start, w = colw * (i - start);
+if (beam[start] === null) hatch(hatchColor, x, T, w, ph);
+else if (beam[start] === "broken") { cx.save(); cx.globalAlpha = 0.18; cx.fillStyle = red; cx.fillRect(x, T, w, ph); cx.restore(); }
+start = i;
+}
+cx.font = "24px Georgia, serif";
+cx.fillStyle = faint;
+cx.strokeStyle = document.documentElement.dataset.theme === "dark" ? "#8ab4f8" : "#5686c4";
+cx.lineWidth = 2;
+cx.setLineDash([8, 6]);
+for (let k = 0; k <= 4; k++) {
+const yy = T + (ph * k) / 4;
+cx.beginPath(); cx.moveTo(L, yy); cx.lineTo(W - R, yy); cx.stroke();
+cx.textAlign = "left";
+cx.fillText((hi - (hi * k) / 4).toFixed(2), W - R + 22, yy + 8);
+}
+for (let sec = 300; sec >= 0; sec -= 100) {
+const x = L + pw * (1 - sec / 300);
+cx.beginPath(); cx.moveTo(x, T); cx.lineTo(x, T + ph); cx.stroke();
+cx.textAlign = "center";
+cx.fillText(sec, x, T + ph + 38);
+}
+cx.setLineDash([]);
+cx.beginPath();
+cx.moveTo(W - R + 100, T + ph); cx.lineTo(L - 35, T + ph);
+cx.lineTo(L - 20, T + ph - 10);
+cx.moveTo(L - 35, T + ph); cx.lineTo(L - 20, T + ph + 10);
+cx.moveTo(W - R, T + ph + 15); cx.lineTo(W - R, T - 35);
+cx.lineTo(W - R - 10, T - 20);
+cx.moveTo(W - R, T - 35); cx.lineTo(W - R + 10, T - 20);
+cx.stroke();
+cx.fillStyle = ink;
+cx.textAlign = "left";
+cx.fillText("Level", W - R + 22, T - 28);
+cx.textAlign = "center";
+cx.fillText("Seconds ago", L + pw / 2, H - 12);
+// Current thresholds, so the line can be read against them.
+cx.lineWidth = 2; cx.setLineDash([3, 6]); cx.strokeStyle = faint; cx.fillStyle = faint; cx.textAlign = "right";
+for (const [v, name] of [[eye.on, "on"], [eye.off, "off"]]) {
+if (v == null) continue;
+cx.beginPath(); cx.moveTo(L, y(v)); cx.lineTo(W - R, y(v)); cx.stroke();
+cx.fillText(name, L - 12, y(v) + 8);
+}
+cx.setLineDash([]);
+cx.strokeStyle = ink; cx.lineWidth = 3.5;
+cx.beginPath();
+let pen = false;
+for (let j = 0; j < N; j++) {
+const v = level[j];
+if (v == null) { pen = false; continue; }
+const x = L + colw * (j + 0.5);
+if (pen) cx.lineTo(x, y(v)); else cx.moveTo(x, y(v));
+pen = true;
+}
+cx.stroke();
+}
+let theme = "light";
+try { theme = localStorage.getItem("theme") === "dark" ? "dark" : "light"; } catch (e) { /* localStorage blocked */ }
+function applyTheme() {
+document.documentElement.dataset.theme = theme;
+$("theme-toggle").textContent = theme === "dark" ? "Light mode" : "Dark mode";
+$("theme-toggle").setAttribute("aria-pressed", String(theme === "dark"));
+}
+applyTheme();
+$("theme-toggle").addEventListener("click", () => {
+theme = theme === "dark" ? "light" : "dark";
+try { localStorage.setItem("theme", theme); } catch (e) { /* localStorage blocked */ }
+applyTheme();
+draw();
+});
+const clock = (t) => new Date(t).toLocaleTimeString();
+const num = (v) => (v == null ? "—" : v.toFixed(3));
+function place(el, v, hi) {
+el.style.display = v == null ? "none" : "block";
+if (v != null) el.style.left = (100 * Math.min(v, hi) / hi) + "%";
+}
+function render() {
+const e = eye, line = $("line"), beam = $("beam");
+if (!e || !e.online) {
+line.textContent = e && e.lastSeen
+? "No data available. The last report arrived at " + clock(e.lastSeen) + "."
+: "No data available. The eye has not reported since the server started.";
+line.className = "status off";
+beam.textContent = "No data available"; beam.className = "msg";
+} else {
+line.textContent = "The eye is on and reporting.";
+line.className = "status";
+beam.textContent = e.beam === "broken" ? "Beam broken" : "Beam clear";
+beam.className = e.beam;
+}
+if (e) {
+$("breaches").textContent = e.breaches === 1 ? "1 break counted by the eye." : e.breaches + " breaks counted by the eye.";
+const hi = top(e);
+$("level").textContent = num(e.level);
+$("fill").style.width = e.level == null ? "0" : (100 * Math.min(e.level, hi) / hi) + "%";
+$("fill").className = e.beam === "broken" ? "broken" : "";
+place($("mon"), e.on, hi); place($("moff"), e.off, hi);
+$("lon").textContent = "On threshold " + num(e.on);
+$("loff").textContent = "Off threshold " + num(e.off);
+const newest = e.events.length ? e.events[e.events.length - 1].t : 0;
+if (newest !== shownEvent) {
+shownEvent = newest;
+$("noevents").hidden = e.events.length > 0;
+$("events").innerHTML = e.events.slice().reverse().map((ev) =>
+`<li><time>${clock(ev.t)}</time><span class="${ev.state}">${ev.state === "broken" ? "Beam broken" : "Beam cleared"}</span></li>`
+).join("");
+}
+const a = e.lastAlert;
+$("lastsent").textContent = a
+? "Last message sent " + new Date(a.t).toLocaleString() + (a.to ? " to " + a.to : "") + (a.ok ? "." : ", but delivery failed.")
+: "No message has been sent yet.";
+}
+draw();
+}
+async function request(url, options = {}) {
+const controller = new AbortController();
+const timer = setTimeout(() => controller.abort(), 5000);
+try {
+const r = await fetch(url, { ...options, cache: "no-store", signal: controller.signal });
+if (!r.ok) throw new Error("HTTP " + r.status);
+return await r.json();
+} finally { clearTimeout(timer); }
+}
+function poll() {
+request("/api/eye").then((j) => { eye = j; })
+.catch(() => { if (eye) eye.online = false; })
+.finally(() => { render(); setTimeout(poll, 1000); });
+}
+request("/api/eye/alerts").then((j) => {
+$("email").value = j.email; $("subject").value = j.subject; $("message").value = j.message;
+}).catch(() => { $("saved").textContent = "Could not load the saved settings."; });
+$("save").onclick = () => {
+const b = { email: $("email").value, subject: $("subject").value, message: $("message").value };
+request("/api/eye/alerts", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) })
+.then(() => { $("saved").textContent = "Saved."; })
+.catch(() => { $("saved").textContent = "Not saved. Please try again."; })
+.finally(() => setTimeout(() => { $("saved").textContent = ""; }, 4000));
+};
+poll();
+})();
+</script>
+</body>
+</html>
