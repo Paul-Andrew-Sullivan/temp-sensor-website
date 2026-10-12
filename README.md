@@ -11,7 +11,7 @@ Both pages read "No data available" until a board reports. See **The board** bel
 
 ## Electric eye (Lab 2)
 
-The Lab 2 IR beam interrupter reports to the same backend. Its page is https://thermobox.paulandrewsullivan.com/eye.html (`esp32-site/eye.html`): the beam state, the signal level against the two thresholds, a 300 s chart with broken seconds shaded, the last 50 beam changes and the alert settings the board reads. The board posts to `/eye/ingest` with the same `X-Probe-Token`; the routes are in `docs/api.md`.
+The Lab 2 IR beam interrupter reports to the same backend. Its page is https://irbeam.paulandrewsullivan.com (`esp32-site/eye.html`, still also at https://thermobox.paulandrewsullivan.com/eye.html): the beam state, the signal level against the two thresholds, a 300 s chart with broken seconds shaded, the last 50 beam changes and the alert settings the board reads. The board posts to `/eye/ingest` with the same `X-Probe-Token`; the routes are in `docs/api.md`.
 
 ## Layout
 
